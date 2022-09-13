@@ -19,7 +19,6 @@ option(TBM_CTEST_OUTPUT_JSON
 
 set(TBM_BENCH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 
-# Metatarget to build all benchmarks
 add_custom_target(bench.all)
 
 function(get_test_params src labels_var defs_var)
