@@ -22,6 +22,66 @@ set(TBM_BENCH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 # Metatarget to build all benchmarks
 add_custom_target(bench.all)
 
+function(get_test_params src labels_var defs_var)
+  file(READ "${src}" file_data)
+  set(param_regex "//[ ]+%PARAM%[ ]+([^ ]+)[ ]+([^ ]+)[ ]+([^\n]*)")
+
+  string(REGEX MATCHALL
+    "${param_regex}"
+    matches
+    "${file_data}"
+  )
+
+  set(variant_labels)
+  set(variant_defs)
+
+  foreach(match IN LISTS matches)
+    string(REGEX MATCH
+      "${param_regex}"
+      unused
+      "${match}"
+    )
+
+    set(def ${CMAKE_MATCH_1})
+    set(label ${CMAKE_MATCH_2})
+    set(values "${CMAKE_MATCH_3}")
+    string(REPLACE ":" ";" values "${values}")
+
+    # Build lists of test name suffixes (labels) and preprocessor definitions
+    # (defs) containing the cartesian product of all param values:
+    if (NOT variant_labels)
+      foreach(value IN LISTS values)
+        list(APPEND variant_labels ${label}_${value})
+      endforeach()
+    else()
+      set(tmp_labels)
+      foreach(old_label IN LISTS variant_labels)
+        foreach(value IN LISTS values)
+          list(APPEND tmp_labels ${old_label}.${label}_${value})
+        endforeach()
+      endforeach()
+      set(variant_labels "${tmp_labels}")
+    endif()
+
+    if (NOT variant_defs)
+      foreach(value IN LISTS values)
+        list(APPEND variant_defs ${def}=${value})
+      endforeach()
+    else()
+      set(tmp_defs)
+      foreach(old_def IN LISTS variant_defs)
+        foreach(value IN LISTS values)
+          list(APPEND tmp_defs ${old_def}:${def}=${value})
+        endforeach()
+      endforeach()
+      set(variant_defs "${tmp_defs}")
+    endif()
+  endforeach()
+
+  set(${labels_var} "${variant_labels}" PARENT_SCOPE)
+  set(${defs_var} "${variant_defs}" PARENT_SCOPE)
+endfunction()
+
 function(tbm_add_bench target_name_var bench_name bench_src thrust_target)
   set(bench_target ${bench_name})
   set(${target_name_var} ${bench_target} PARENT_SCOPE)
@@ -95,25 +155,30 @@ endfunction()
 
 function(tbm_add_bench_dir bench_dir)
   foreach(thrust_target IN LISTS THRUST_TARGETS)
-    # TODO Need to eventually get this from the props...they might already
-    # exist on the targets made with thrust_create_target. If not, they should.
-    #  thrust_get_target_property(config_device ${thrust_target} DEVICE)
-    #  thrust_get_target_property(config_prefix ${thrust_target} PREFIX)
-
     file(GLOB bench_srcs
       CONFIGURE_DEPENDS
       "${bench_dir}/*.cu"
     )
 
-    # TODO The cmake_path command (3.19) may have better ways to do this:
     file(RELATIVE_PATH bench_prefix "${TBM_BENCH_ROOT}" "${bench_dir}")
     file(TO_CMAKE_PATH "${bench_prefix}" bench_prefix)
     string(REPLACE "/" "." bench_prefix "${bench_prefix}")
 
     foreach(bench_src IN LISTS bench_srcs)
-      get_filename_component(bench_name "${bench_src}" NAME_WLE)
-      string(PREPEND bench_name "bench.${bench_prefix}.")
-      tbm_add_bench(bench_target ${bench_name} "${bench_src}" ${thrust_target})
+      get_test_params("${bench_src}" variant_labels variant_defs)
+      list(LENGTH variant_labels num_variants)
+      math(EXPR range_end "${num_variants} - 1")
+
+      foreach(var_idx RANGE ${range_end})
+        get_filename_component(bench_name "${bench_src}" NAME_WLE)
+        string(PREPEND bench_name "bench.${bench_prefix}.")
+        list(GET variant_labels ${var_idx} label)
+        string(APPEND bench_name ".${label}")
+        tbm_add_bench(bench_target ${bench_name} "${bench_src}" ${thrust_target})
+        list(GET variant_defs ${var_idx} defs)
+        string(REPLACE ":" ";" defs "${defs}")
+        target_compile_definitions(${bench_target} PRIVATE ${defs})
+      endforeach()
     endforeach()
   endforeach()
 endfunction()

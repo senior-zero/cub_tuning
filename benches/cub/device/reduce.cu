@@ -16,13 +16,16 @@ using all_value_types = nvbench::type_list<nvbench::uint8_t,
                                            nvbench::uint64_t,
                                            nvbench::float64_t>;
 
+// %PARAM% TUNE_BLOCK_THREADS bt 128:256
+// %PARAM% TUNE_ITEMS_PER_THREAD ipt 18:19:20:21
+
 template <typename AccumT, typename OffsetT>    
 struct policy_hub_t  
 {
   struct policy_t : cub::ChainedPolicy<300, policy_t, policy_t>
   {
-    static constexpr int threads_per_block  = 256;
-    static constexpr int items_per_thread   = 20;
+    static constexpr int threads_per_block  = TUNE_BLOCK_THREADS;
+    static constexpr int items_per_thread   = TUNE_ITEMS_PER_THREAD;
     static constexpr int items_per_vec_load = 2;
 
     using ReducePolicy = 
