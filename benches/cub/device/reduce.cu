@@ -9,12 +9,11 @@
 
 #include <string>
 
-using all_value_types = nvbench::type_list<nvbench::uint8_t,
-                                           nvbench::uint16_t,
-                                           nvbench::uint32_t,
-                                           nvbench::float32_t,
-                                           nvbench::uint64_t,
-                                           nvbench::float64_t>;
+using all_value_types = nvbench::type_list<nvbench::int8_t,
+                                           nvbench::int16_t,
+                                           nvbench::int32_t,
+                                           nvbench::int64_t,
+                                           __int128>;
 
 // %PARAM% TUNE_BLOCK_THREADS bt 128:256
 // %PARAM% TUNE_ITEMS_PER_THREAD ipt 16:20
