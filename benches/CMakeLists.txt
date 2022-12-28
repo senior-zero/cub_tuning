@@ -85,23 +85,10 @@ function(tbm_add_bench target_name_var bench_name bench_src thrust_target)
   set(bench_target ${bench_name})
   set(${target_name_var} ${bench_target} PARENT_SCOPE)
 
-  # To support compilation with `nvcc -keep`, all source files must have unique
-  # filenames, not just unique paths, as nvcc's temporary files are all prefixed
-  # with the source filename and written to the same directory.
-  #
-  # To work-around this, configure a wrapper file with the full test name and
-  # pass that to the compiler.
-  set(wrapped_src "${CMAKE_CURRENT_BINARY_DIR}/wrapped_srcs/${bench_name}.cu")
-  file(CONFIGURE
-    OUTPUT "${wrapped_src}"
-    CONTENT "#include <@bench_src@>\n"
-    @ONLY
-  )
-
   set(results_dir "${TBM_BINARY_DIR}/results")
   file(MAKE_DIRECTORY "${results_dir}")
 
-  add_executable(${bench_target} "${wrapped_src}")
+  add_executable(${bench_target} "${bench_src}")
   target_link_libraries(${bench_target} ${thrust_target} nvbench::main fmt::fmt)
   target_include_directories(${bench_target} PRIVATE "${TBM_BENCH_ROOT}")
   set_property(TARGET ${bench_target} PROPERTY CUDA_SEPARABLE_COMPILATION OFF)

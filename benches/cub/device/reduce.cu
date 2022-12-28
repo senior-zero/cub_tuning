@@ -1,5 +1,3 @@
-#pragma once
-
 #include <cub/device/device_reduce.cuh>
 
 #include <thrust/device_vector.h>
