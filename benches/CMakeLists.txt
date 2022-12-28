@@ -104,7 +104,7 @@ function(tbm_add_bench target_name_var bench_name bench_src thrust_target)
   add_executable(${bench_target} "${wrapped_src}")
   target_link_libraries(${bench_target} ${thrust_target} nvbench::main fmt::fmt)
   target_include_directories(${bench_target} PRIVATE "${TBM_BENCH_ROOT}")
-  set_property(TARGET ${bench_target} PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+  set_property(TARGET ${bench_target} PROPERTY CUDA_SEPARABLE_COMPILATION OFF)
   set_target_properties(${bench_target} PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${TBM_LIBRARY_OUTPUT_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${TBM_LIBRARY_OUTPUT_DIR}"

@@ -32,13 +32,8 @@ include(cmake/TbmUtilities.cmake)
 set(TBM_LIBRARY_OUTPUT_DIR "${CMAKE_BINARY_DIR}/lib")
 set(TBM_EXECUTABLE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/bin")
 
-# TODO Allow a specific tag to be fetched with CPM as a CMake option
 find_package(Thrust REQUIRED CONFIG)
-
-# TODO Other device systems:
-thrust_create_target(ThrustCUDA)
-set(THRUST_TARGETS ThrustCUDA)
-
-enable_testing()
+thrust_create_target(ThrustCUDA)  
+set(THRUST_TARGETS ThrustCUDA)   
 
 add_subdirectory(benches)
