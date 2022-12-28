@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.18.3)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # CXX needed for fmt
 project(TBM CXX CUDA)
@@ -22,6 +23,8 @@ CPMAddPackage(
     "CMAKE_POSITION_INDEPENDENT_CODE ON"
 )
 
+CPMAddPackage("gh:NVIDIA/nvbench#main")
+
 include(cmake/TbmUtilities.cmake)
 
 # Where to put build outputs. Use CMAKE_BINARY_DIR so they'll show up in the
@@ -38,5 +41,4 @@ set(THRUST_TARGETS ThrustCUDA)
 
 enable_testing()
 
-add_subdirectory(nvbench)
 add_subdirectory(benches)
