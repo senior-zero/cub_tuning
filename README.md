@@ -1,0 +1,24 @@
+## Benchmarks to port
+
+- [x] Reduce
+- [x] Scan
+- [ ] RadixSort::Keys
+- [ ] RadixSort::Pairs
+- [ ] RunLengthEncode::Encode
+- [ ] RunLengthEncode::NonTrivialRuns
+- [ ] SegmentedRadixSort::Keys
+- [ ] SegmentedRadixSort::Pairs
+- [ ] SegmentedReduce
+- [ ] SegmentedSort::Keys
+- [ ] SegmentedSort::Pairs
+- [ ] Select::Flagged
+- [ ] Select::If
+- [ ] Select::Unique
+- [ ] ReduceByKey
+- [ ] ScanByKey
+- [ ] Partition::Flagged
+- [ ] Partition::If
+- [ ] MergeSort
+- [ ] HistogramEven
+- [ ] HistogramRange
+- [ ] AdjacentDifference
