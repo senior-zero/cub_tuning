@@ -11,6 +11,7 @@
 // %PARAM% TUNE_ITEMS_PER_THREAD ipt 16:20
 // %PARAM% TUNE_ITEMS_PER_VEC_LOAD ipv 1:2:4
 
+#if !TUNE_BASE
 template <typename AccumT, typename OffsetT>
 struct policy_hub_t
 {
@@ -36,6 +37,7 @@ struct policy_hub_t
 
   using MaxPolicy = policy_t;
 };
+#endif
 
 template <typename T>
 void reduce(nvbench::state &state, nvbench::type_list<T>)
@@ -47,9 +49,14 @@ void reduce(nvbench::state &state, nvbench::type_list<T>)
   using output_t    = T;
   using init_t      = T;
   using op_t        = cub::Sum;
-  using policy_t    = policy_hub_t<accum_t, offset_t>;
+#if !TUNE_BASE
+  using policy_t   = policy_hub_t<accum_t, offset_t>;
   using dispatch_t =
     cub::DispatchReduce<input_it_t, output_it_t, offset_t, op_t, init_t, accum_t, policy_t>;
+#else
+  using dispatch_t =
+    cub::DispatchReduce<input_it_t, output_it_t, offset_t, op_t, init_t, accum_t>;
+#endif
 
   // Retrieve axis parameters
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));

@@ -165,6 +165,13 @@ function(tbm_add_bench_dir bench_dir)
         string(REPLACE ":" ";" defs "${defs}")
         target_compile_definitions(${bench_target} PRIVATE ${defs})
       endforeach()
+
+      # base tuning
+      get_filename_component(bench_name "${bench_src}" NAME_WLE)
+      string(PREPEND bench_name "bench.${bench_prefix}.")
+      string(APPEND bench_name ".base")
+      tbm_add_bench(bench_target ${bench_name} "${bench_src}" ${thrust_target})
+      target_compile_definitions(${bench_target} PRIVATE TUNE_BASE=1)
     endforeach()
   endforeach()
 endfunction()

@@ -9,6 +9,7 @@
 // %PARAM% TUNE_BLOCK_THREADS bt 128:256
 // %PARAM% TUNE_ITEMS_PER_THREAD ipt 12:15
 
+#if !TUNE_BASE
 template <typename AccumT>
 struct policy_hub_t
 {
@@ -25,6 +26,7 @@ struct policy_hub_t
 
   using MaxPolicy = policy_t;
 };
+#endif
 
 template <typename T>
 static void basic(nvbench::state &state, nvbench::type_list<T>)
@@ -36,9 +38,15 @@ static void basic(nvbench::state &state, nvbench::type_list<T>)
   using output_t    = T;
   using init_t      = cub::detail::InputValue<T>;
   using op_t        = cub::Sum;
+
+#if !TUNE_BASE
   using policy_t    = policy_hub_t<accum_t>;
   using dispatch_t =
     cub::DispatchScan<input_it_t, output_it_t, op_t, init_t, offset_t, accum_t, policy_t>;
+#else
+  using dispatch_t =
+    cub::DispatchScan<input_it_t, output_it_t, op_t, init_t, offset_t, accum_t>;
+#endif
 
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));
 
