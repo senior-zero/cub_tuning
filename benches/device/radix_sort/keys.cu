@@ -10,6 +10,12 @@
 
 // %PARAM% TUNE_RADIX_BITS bits 5
 
+using value_t  = cub::NullType;
+using offset_t = std::int32_t;
+
+constexpr bool is_descending   = false;
+constexpr bool is_overwrite_ok = true;
+
 #if !TUNE_BASE
 template <typename KeyT, typename ValueT, typename OffsetT>
 struct policy_hub_t
@@ -22,11 +28,11 @@ struct policy_hub_t
   {
     enum
     {
-      PRIMARY_RADIX_BITS     = (sizeof(KeyT) > 1) ? 7 : 5,
-      SINGLE_TILE_RADIX_BITS = (sizeof(KeyT) > 1) ? 6 : 5,
-      SEGMENTED_RADIX_BITS   = (sizeof(KeyT) > 1) ? 6 : 5,
+      PRIMARY_RADIX_BITS     = TUNE_RADIX_BITS,
+      SINGLE_TILE_RADIX_BITS = (sizeof(KeyT) > 1) ? 6 : 5, // No point in tuning
+      SEGMENTED_RADIX_BITS   = TUNE_RADIX_BITS,
       ONESWEEP               = sizeof(KeyT) >= sizeof(uint32_t),
-      ONESWEEP_RADIX_BITS    = 8,
+      ONESWEEP_RADIX_BITS    = TUNE_RADIX_BITS,
       OFFSET_64BIT           = sizeof(OffsetT) == 8,
     };
 
@@ -100,17 +106,75 @@ struct policy_hub_t
 
   using MaxPolicy = policy_t;
 };
+
+template <typename KeyT, typename ValueT, typename OffsetT>
+constexpr std::size_t max_upsweep_temp_storage_size()
+{
+  using upsweep_policy = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::UpsweepPolicy;
+  using alt_upsweep_policy =
+    typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::AltUpsweepPolicy;
+
+  using agent_radix_sort_upsweep_t     = cub::AgentRadixSortUpsweep<upsweep_policy, KeyT, OffsetT>;
+  using alt_agent_radix_sort_upsweep_t = cub::AgentRadixSortUpsweep<alt_upsweep_policy, KeyT, OffsetT>;
+
+  return cub::max(sizeof(typename agent_radix_sort_upsweep_t::TempStorage),
+                  sizeof(typename alt_agent_radix_sort_upsweep_t::TempStorage));
+}
+
+template <typename KeyT, typename ValueT, typename OffsetT>
+constexpr std::size_t max_downsweep_temp_storage_size()
+{
+  using downsweep_policy = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::DownsweepPolicy;
+  using alt_downsweep_policy =
+    typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::AltDownsweepPolicy;
+
+  using agent_radix_sort_downsweep_t =
+    cub::AgentRadixSortDownsweep<downsweep_policy, is_descending, KeyT, ValueT, OffsetT>;
+  using alt_agent_radix_sort_downsweep_t =
+    cub::AgentRadixSortDownsweep<alt_downsweep_policy, is_descending, KeyT, ValueT, OffsetT>;
+
+  return cub::max(sizeof(typename agent_radix_sort_downsweep_t::TempStorage),
+                  sizeof(typename alt_agent_radix_sort_downsweep_t::TempStorage));
+}
+
+template <typename KeyT, typename ValueT, typename OffsetT>
+constexpr std::size_t max_onesweep_temp_storage_size()
+{
+  using portion_offset  = int;
+  using onesweep_policy = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::OnesweepPolicy;
+  using agent_radix_sort_onesweep_t =
+    cub::AgentRadixSortOnesweep<onesweep_policy, is_descending, KeyT, ValueT, OffsetT, portion_offset>;
+
+  return sizeof(typename agent_radix_sort_onesweep_t::TempStorage);
+}
+
+template <typename KeyT, typename ValueT, typename OffsetT>
+constexpr std::size_t max_temp_storage_size()
+{
+  return cub::max(max_upsweep_temp_storage_size<KeyT, ValueT, OffsetT>(),
+                  cub::max(max_downsweep_temp_storage_size<KeyT, ValueT, OffsetT>(),
+                           max_onesweep_temp_storage_size<KeyT, ValueT, OffsetT>()));
+}
+
+template <typename KeyT, typename ValueT, typename OffsetT>
+constexpr bool fits_in_default_shared_memory()
+{
+  return max_temp_storage_size<KeyT, ValueT, OffsetT>() < 48 * 1024;
+}
+#else 
+template <typename, typename, typename>
+constexpr bool fits_in_default_shared_memory()
+{
+  return true;
+}
 #endif
 
 template <typename T>
-void radix_sort_keys(nvbench::state &state, nvbench::type_list<T>)
+void radix_sort_keys(std::integral_constant<bool, true>,
+                     nvbench::state &state,
+                     nvbench::type_list<T>)
 {
-  constexpr bool is_descending   = false;
-  constexpr bool is_overwrite_ok = true;
-
-  using key_t    = T;
-  using value_t  = cub::NullType;
-  using offset_t = std::int32_t;
+  using key_t = T;
 #if !TUNE_BASE
   using policy_t   = policy_hub_t<key_t, value_t, offset_t>;
   using dispatch_t = cub::DispatchRadixSort<is_descending, key_t, value_t, offset_t, policy_t>;
@@ -167,9 +231,25 @@ void radix_sort_keys(nvbench::state &state, nvbench::type_list<T>)
   });
 }
 
+template <typename T>
+void radix_sort_keys(std::integral_constant<bool, false>, nvbench::state &, nvbench::type_list<T>)
+{
+  (void)is_descending;
+  (void)is_overwrite_ok;
+}
+
+template <typename T>
+void radix_sort_keys(nvbench::state &state, nvbench::type_list<T> tl)
+{
+  radix_sort_keys(
+    std::integral_constant<bool, fits_in_default_shared_memory<T, value_t, offset_t>()>{},
+    state,
+    tl);
+}
+
+// TODO __int128
 using all_value_types =
-  nvbench::type_list<nvbench::int8_t, nvbench::int16_t, nvbench::int32_t, nvbench::int64_t>; // TODO
-                                                                                             // __int128
+  nvbench::type_list<nvbench::int8_t, nvbench::int16_t, nvbench::int32_t, nvbench::int64_t>;
 
 NVBENCH_BENCH_TYPES(radix_sort_keys, NVBENCH_TYPE_AXES(all_value_types))
   .set_name("cub::DeviceRadixSort::SortKeys")
