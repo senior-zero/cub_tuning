@@ -250,9 +250,8 @@ void radix_sort_keys(nvbench::state &state, nvbench::type_list<T> tl)
     tl);
 }
 
-// TODO __int128
 using all_value_types =
-  nvbench::type_list<nvbench::int8_t, nvbench::int16_t, nvbench::int32_t, nvbench::int64_t>;
+  nvbench::type_list<nvbench::int8_t, nvbench::int16_t, nvbench::int32_t, nvbench::int64_t, __int128_t>;
 
 NVBENCH_BENCH_TYPES(radix_sort_keys, NVBENCH_TYPE_AXES(all_value_types))
   .set_name("cub::DeviceRadixSort::SortKeys")
