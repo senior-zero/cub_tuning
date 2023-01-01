@@ -8,7 +8,7 @@
 #include <nvbench/nvbench.cuh>
 #include <type_traits>
 
-// %PARAM% TUNE_RADIX_BITS bits 5
+// %PARAM% TUNE_RADIX_BITS bits 5:6:7:8
 
 using value_t  = cub::NullType;
 using offset_t = std::int32_t;
