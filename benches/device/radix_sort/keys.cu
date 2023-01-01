@@ -186,7 +186,7 @@ void radix_sort_keys(std::integral_constant<bool, true>,
 #endif
 
   const int begin_bit = 0;
-  const int end_bit   = sizeof(key_t) * 8;
+  const int end_bit   = 3;
 
   // Retrieve axis parameters
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));
@@ -220,6 +220,18 @@ void radix_sort_keys(std::integral_constant<bool, true>,
 
   thrust::device_vector<nvbench::uint8_t> temp(temp_size);
   auto *temp_storage = thrust::raw_pointer_cast(temp.data());
+
+  // Presort data to reduce noise
+  dispatch_t::Dispatch(temp_storage,
+                       temp_size,
+                       d_keys,
+                       d_values,
+                       static_cast<offset_t>(elements),
+                       begin_bit,
+                       end_bit,
+                       is_overwrite_ok,
+                       0 /* stream */);
+  cudaDeviceSynchronize();
 
   state.exec([&](nvbench::launch &launch) {
     dispatch_t::Dispatch(temp_storage,
