@@ -114,8 +114,9 @@ constexpr std::size_t max_upsweep_temp_storage_size()
   using alt_upsweep_policy =
     typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::AltUpsweepPolicy;
 
-  using agent_radix_sort_upsweep_t     = cub::AgentRadixSortUpsweep<upsweep_policy, KeyT, OffsetT>;
-  using alt_agent_radix_sort_upsweep_t = cub::AgentRadixSortUpsweep<alt_upsweep_policy, KeyT, OffsetT>;
+  using agent_radix_sort_upsweep_t = cub::AgentRadixSortUpsweep<upsweep_policy, KeyT, OffsetT>;
+  using alt_agent_radix_sort_upsweep_t =
+    cub::AgentRadixSortUpsweep<alt_upsweep_policy, KeyT, OffsetT>;
 
   return cub::max(sizeof(typename agent_radix_sort_upsweep_t::TempStorage),
                   sizeof(typename alt_agent_radix_sort_upsweep_t::TempStorage));
@@ -142,8 +143,8 @@ constexpr std::size_t max_onesweep_temp_storage_size()
 {
   using portion_offset  = int;
   using onesweep_policy = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::OnesweepPolicy;
-  using agent_radix_sort_onesweep_t =
-    cub::AgentRadixSortOnesweep<onesweep_policy, is_descending, KeyT, ValueT, OffsetT, portion_offset>;
+  using agent_radix_sort_onesweep_t = cub::
+    AgentRadixSortOnesweep<onesweep_policy, is_descending, KeyT, ValueT, OffsetT, portion_offset>;
 
   return sizeof(typename agent_radix_sort_onesweep_t::TempStorage);
 }
@@ -151,9 +152,11 @@ constexpr std::size_t max_onesweep_temp_storage_size()
 template <typename KeyT, typename ValueT, typename OffsetT>
 constexpr std::size_t max_temp_storage_size()
 {
-  return cub::max(max_upsweep_temp_storage_size<KeyT, ValueT, OffsetT>(),
-                  cub::max(max_downsweep_temp_storage_size<KeyT, ValueT, OffsetT>(),
-                           max_onesweep_temp_storage_size<KeyT, ValueT, OffsetT>()));
+  using policy_t = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t;
+
+  return policy_t::ONESWEEP ? max_onesweep_temp_storage_size<KeyT, ValueT, OffsetT>()
+                            : cub::max(max_upsweep_temp_storage_size<KeyT, ValueT, OffsetT>(),
+                                       max_downsweep_temp_storage_size<KeyT, ValueT, OffsetT>());
 }
 
 template <typename KeyT, typename ValueT, typename OffsetT>
@@ -161,7 +164,7 @@ constexpr bool fits_in_default_shared_memory()
 {
   return max_temp_storage_size<KeyT, ValueT, OffsetT>() < 48 * 1024;
 }
-#else 
+#else
 template <typename, typename, typename>
 constexpr bool fits_in_default_shared_memory()
 {
