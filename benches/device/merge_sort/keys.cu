@@ -71,8 +71,8 @@ void merge_sort_keys(nvbench::state &state, nvbench::type_list<T>)
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));
   thrust::device_vector<T> buffer_1(elements);
   thrust::device_vector<T> buffer_2(elements);
-  thrust::sequence(buffer_1.begin(), buffer_1.end());
-  thrust::sequence(buffer_2.begin(), buffer_2.end());
+  thrust::sequence(buffer_1.rbegin(), buffer_1.rend());
+  thrust::sequence(buffer_2.rbegin(), buffer_2.rend());
 
   key_t *d_buffer_1 = thrust::raw_pointer_cast(buffer_1.data());
   key_t *d_buffer_2 = thrust::raw_pointer_cast(buffer_2.data());
