@@ -4,9 +4,9 @@
 #include <thrust/sequence.h>
 
 #include <string>
-
-#include <nvbench/nvbench.cuh>
 #include <type_traits>
+
+#include <common.cuh>
 
 // %PARAM% TUNE_RADIX_BITS bits 5:6:7:8
 
@@ -261,9 +261,6 @@ void radix_sort_keys(nvbench::state &state, nvbench::type_list<T> tl)
     state,
     tl);
 }
-
-using all_value_types =
-  nvbench::type_list<nvbench::int8_t, nvbench::int16_t, nvbench::int32_t, nvbench::int64_t, __int128_t>;
 
 NVBENCH_BENCH_TYPES(radix_sort_keys, NVBENCH_TYPE_AXES(all_value_types))
   .set_name("cub::DeviceRadixSort::SortKeys")

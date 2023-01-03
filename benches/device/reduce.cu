@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include <nvbench/nvbench.cuh>
+#include <common.cuh>
 
 // %PARAM% TUNE_BLOCK_THREADS bt 128:256
 // %PARAM% TUNE_ITEMS_PER_THREAD ipt 16:20
@@ -97,9 +97,6 @@ void reduce(nvbench::state &state, nvbench::type_list<T>)
                          launch.get_stream());
   });
 }
-
-using all_value_types =
-  nvbench::type_list<nvbench::int8_t, nvbench::int16_t, nvbench::int32_t, nvbench::int64_t, __int128>;
 
 NVBENCH_BENCH_TYPES(reduce, NVBENCH_TYPE_AXES(all_value_types))
   .set_name("cub::DeviceReduce::Reduce")

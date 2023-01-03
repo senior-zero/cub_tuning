@@ -4,9 +4,9 @@
 #include <thrust/sequence.h>
 
 #include <string>
-
-#include <nvbench/nvbench.cuh>
 #include <type_traits>
+
+#include <common.cuh>
 
 // %PARAM% TUNE_BLOCK_THREADS bt 128:256:512
 // %PARAM% TUNE_ITEMS_PER_THREAD ipt 16:17:18:19:20
@@ -109,9 +109,6 @@ void merge_sort_keys(nvbench::state &state, nvbench::type_list<T>)
                          launch.get_stream());
   });
 }
-
-using all_value_types = nvbench::
-  type_list<nvbench::int8_t, nvbench::int16_t, nvbench::int32_t, nvbench::int64_t, __int128_t>;
 
 NVBENCH_BENCH_TYPES(merge_sort_keys, NVBENCH_TYPE_AXES(all_value_types))
   .set_name("cub::DeviceMergeSort::SortKeys")
