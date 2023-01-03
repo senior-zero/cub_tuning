@@ -3,7 +3,9 @@
 - [x] Reduce
 - [x] Scan
 - [x] RadixSort::Keys
-- [ ] RadixSort::Pairs
+- [x] RadixSort::Pairs
+- [x] MergeSort::SortKeys
+- [x] MergeSort::SortPairs
 - [ ] RunLengthEncode::Encode
 - [ ] RunLengthEncode::NonTrivialRuns
 - [ ] SegmentedRadixSort::Keys
@@ -18,7 +20,6 @@
 - [ ] ScanByKey
 - [ ] Partition::Flagged
 - [ ] Partition::If
-- [x] MergeSort
 - [ ] HistogramEven
 - [ ] HistogramRange
 - [ ] AdjacentDifference
