@@ -186,7 +186,7 @@ void radix_sort_keys(std::integral_constant<bool, true>,
 #endif
 
   const int begin_bit = 0;
-  const int end_bit   = 3;
+  const int end_bit   = sizeof(key_t) * 8;
 
   // Retrieve axis parameters
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));
