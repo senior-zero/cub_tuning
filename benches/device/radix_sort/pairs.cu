@@ -1,7 +1,6 @@
 #include <cub/device/device_radix_sort.cuh>
 
 #include <thrust/device_vector.h>
-#include <thrust/sequence.h>
 
 #include <string>
 
@@ -10,10 +9,11 @@
 
 // %PARAM% TUNE_RADIX_BITS bits 5:6:7:8
 
-using offset_t = std::int32_t;
+using src_offset_t = std::int32_t;
+using offset_t     = cub::detail::ChooseOffsetT<src_offset_t>::Type;
 
 constexpr bool is_descending   = false;
-constexpr bool is_overwrite_ok = true;
+constexpr bool is_overwrite_ok = false;
 
 #if !TUNE_BASE
 template <typename KeyT, typename ValueT, typename OffsetT>
@@ -194,15 +194,14 @@ void radix_sort_values(std::integral_constant<bool, true>,
   thrust::device_vector<T> keys_buffer_2(elements);
   thrust::device_vector<T> values_buffer_1(elements);
   thrust::device_vector<T> values_buffer_2(elements);
-  thrust::sequence(keys_buffer_1.begin(), keys_buffer_1.end());
-  thrust::sequence(keys_buffer_2.begin(), keys_buffer_2.end());
-  thrust::sequence(values_buffer_1.begin(), values_buffer_1.end());
-  thrust::sequence(values_buffer_2.begin(), values_buffer_2.end());
 
   key_t *d_keys_buffer_1     = thrust::raw_pointer_cast(keys_buffer_1.data());
   key_t *d_keys_buffer_2     = thrust::raw_pointer_cast(keys_buffer_2.data());
   value_t *d_values_buffer_1 = thrust::raw_pointer_cast(values_buffer_1.data());
   value_t *d_values_buffer_2 = thrust::raw_pointer_cast(values_buffer_2.data());
+
+  gen(seed_t{}, keys_buffer_1);
+  gen(seed_t{}, values_buffer_1);
 
   cub::DoubleBuffer<key_t> d_keys(d_keys_buffer_1, d_keys_buffer_2);
   cub::DoubleBuffer<value_t> d_values(d_values_buffer_1, d_values_buffer_2);
@@ -227,23 +226,14 @@ void radix_sort_values(std::integral_constant<bool, true>,
   thrust::device_vector<nvbench::uint8_t> temp(temp_size);
   auto *temp_storage = thrust::raw_pointer_cast(temp.data());
 
-  // Presort data to reduce noise
-  dispatch_t::Dispatch(temp_storage,
-                       temp_size,
-                       d_keys,
-                       d_values,
-                       static_cast<offset_t>(elements),
-                       begin_bit,
-                       end_bit,
-                       is_overwrite_ok,
-                       0 /* stream */);
-  cudaDeviceSynchronize();
-
   state.exec([&](nvbench::launch &launch) {
+    cub::DoubleBuffer<key_t> keys     = d_keys;
+    cub::DoubleBuffer<value_t> values = d_values;
+
     dispatch_t::Dispatch(temp_storage,
                          temp_size,
-                         d_keys,
-                         d_values,
+                         keys,
+                         values,
                          static_cast<offset_t>(elements),
                          begin_bit,
                          end_bit,
@@ -262,10 +252,9 @@ void radix_sort_values(std::integral_constant<bool, false>, nvbench::state &, nv
 template <typename T>
 void radix_sort_values(nvbench::state &state, nvbench::type_list<T> tl)
 {
-  radix_sort_values(
-    std::integral_constant<bool, fits_in_default_shared_memory<T, T, offset_t>()>{},
-    state,
-    tl);
+  radix_sort_values(std::integral_constant<bool, fits_in_default_shared_memory<T, T, offset_t>()>{},
+                    state,
+                    tl);
 }
 
 NVBENCH_BENCH_TYPES(radix_sort_values, NVBENCH_TYPE_AXES(all_value_types))

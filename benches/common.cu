@@ -10,12 +10,8 @@
 
 class generator_t
 {
-private:
-  generator_t();
-
 public:
-
-  static generator_t &instance();
+  generator_t();
   ~generator_t();
 
   template <typename T>
@@ -35,12 +31,6 @@ private:
   curandGenerator_t m_gen;
   thrust::device_vector<float> m_distribution;
 };
-
-generator_t& generator_t::instance()
-{
-  static generator_t generator;
-  return generator;
-}
 
 template <typename T>
 struct random_to_item_t
@@ -107,7 +97,7 @@ void gen(seed_t seed,
          T min,
          T max)
 {
-  generator_t::instance()(seed, data, min, max);
+  generator_t{}(seed, data, min, max);
 }
 
 #define INSTANTIATE_RND(TYPE) \

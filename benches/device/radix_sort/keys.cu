@@ -10,7 +10,8 @@
 // %PARAM% TUNE_RADIX_BITS bits 5:6:7:8
 
 using value_t  = cub::NullType;
-using offset_t = std::int32_t;
+using src_offset_t = std::int32_t;
+using offset_t = cub::detail::ChooseOffsetT<src_offset_t>::Type;
 
 constexpr bool is_descending   = false;
 constexpr bool is_overwrite_ok = false;
@@ -207,6 +208,7 @@ void radix_sort_keys(std::integral_constant<bool, true>,
 
   // Allocate temporary storage:
   std::size_t temp_size{};
+
   dispatch_t::Dispatch(nullptr,
                        temp_size,
                        d_keys,
@@ -220,23 +222,14 @@ void radix_sort_keys(std::integral_constant<bool, true>,
   thrust::device_vector<nvbench::uint8_t> temp(temp_size);
   auto *temp_storage = thrust::raw_pointer_cast(temp.data());
 
-  // Presort data to reduce noise
-  dispatch_t::Dispatch(temp_storage,
-                       temp_size,
-                       d_keys,
-                       d_values,
-                       static_cast<offset_t>(elements),
-                       begin_bit,
-                       end_bit,
-                       is_overwrite_ok,
-                       0 /* stream */);
-  cudaDeviceSynchronize();
-
   state.exec([&](nvbench::launch &launch) {
+    cub::DoubleBuffer<key_t> keys = d_keys;
+    cub::DoubleBuffer<value_t> values = d_values;
+
     dispatch_t::Dispatch(temp_storage,
                          temp_size,
-                         d_keys,
-                         d_values,
+                         keys,
+                         values,
                          static_cast<offset_t>(elements),
                          begin_bit,
                          end_bit,
