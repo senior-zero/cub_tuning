@@ -123,3 +123,6 @@ INSTANTIATE(std::int32_t);
 INSTANTIATE(std::int64_t);
 INSTANTIATE(__int128_t);
 
+INSTANTIATE(float);
+INSTANTIATE(double);
+

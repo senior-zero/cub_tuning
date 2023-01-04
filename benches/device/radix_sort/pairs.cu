@@ -7,7 +7,9 @@
 #include <common.cuh>
 #include <type_traits>
 
-// %PARAM% TUNE_RADIX_BITS bits 5:6:7:8
+// %PARAM% TUNE_RADIX_BITS bits 6:7:8
+// %PARAM% TUNE_ITEMS_PER_THREAD ipt 9:10:11:12:13:14:15:16:17:18:19:20:21:22:23:24:25
+// %PARAM% TUNE_THREADS_PER_BLOCK tpb 96:128:160:192:224:256:288:320:352:384:416:448:480:512:544:576:608:640:672:704:736:768:800:832:864:896:928:960:992:1024
 
 constexpr bool is_descending   = false;
 constexpr bool is_overwrite_ok = false;
@@ -22,117 +24,48 @@ struct policy_hub_t
 
   struct policy_t : cub::ChainedPolicy<300, policy_t, policy_t>
   {
-    enum
-    {
-      PRIMARY_RADIX_BITS     = TUNE_RADIX_BITS,
-      SINGLE_TILE_RADIX_BITS = (sizeof(KeyT) > 1) ? 6 : 5, // No point in tuning
-      SEGMENTED_RADIX_BITS   = TUNE_RADIX_BITS,
-      ONESWEEP               = sizeof(KeyT) >= sizeof(uint32_t),
-      ONESWEEP_RADIX_BITS    = TUNE_RADIX_BITS,
-      OFFSET_64BIT           = sizeof(OffsetT) == 8,
-    };
-
-    // Histogram policy
-    typedef cub::AgentRadixSortHistogramPolicy<128, 16, 1, KeyT, ONESWEEP_RADIX_BITS>
-      HistogramPolicy;
-
-    // Exclusive sum policy
-    typedef cub::AgentRadixSortExclusiveSumPolicy<256, ONESWEEP_RADIX_BITS> ExclusiveSumPolicy;
+    static constexpr int ONESWEEP_RADIX_BITS = TUNE_RADIX_BITS;
+    static constexpr bool ONESWEEP           = true;
+    static constexpr bool OFFSET_64BIT       = sizeof(OffsetT) == 8;
 
     // Onesweep policy
-    typedef cub::AgentRadixSortOnesweepPolicy<384,
-                                              OFFSET_64BIT && sizeof(KeyT) == 4 && !KEYS_ONLY ? 17
-                                                                                              : 21,
-                                              DominantT,
-                                              1,
-                                              cub::RADIX_RANK_MATCH_EARLY_COUNTS_ANY,
-                                              cub::BLOCK_SCAN_RAKING_MEMOIZE,
-                                              cub::RADIX_SORT_STORE_DIRECT,
-                                              ONESWEEP_RADIX_BITS>
-      OnesweepPolicy;
+    using OnesweepPolicy =
+      cub::AgentRadixSortOnesweepPolicy<TUNE_THREADS_PER_BLOCK,
+                                        TUNE_ITEMS_PER_THREAD,
+                                        DominantT,
+                                        1,
+                                        cub::RADIX_RANK_MATCH_EARLY_COUNTS_ANY,
+                                        cub::BLOCK_SCAN_RAKING_MEMOIZE,
+                                        cub::RADIX_SORT_STORE_DIRECT,
+                                        ONESWEEP_RADIX_BITS>;
 
-    // ScanPolicy
-    typedef cub::AgentScanPolicy<512,
-                                 23,
-                                 OffsetT,
-                                 cub::BLOCK_LOAD_WARP_TRANSPOSE,
-                                 cub::LOAD_DEFAULT,
-                                 cub::BLOCK_STORE_WARP_TRANSPOSE,
-                                 cub::BLOCK_SCAN_RAKING_MEMOIZE>
-      ScanPolicy;
+    // These kernels are launched once, no point in tuning at the moment
+    using HistogramPolicy = cub::AgentRadixSortHistogramPolicy<128, 16, 1, KeyT, ONESWEEP_RADIX_BITS>;
+    using ExclusiveSumPolicy = cub::AgentRadixSortExclusiveSumPolicy<256, ONESWEEP_RADIX_BITS>;
+    using ScanPolicy = cub::AgentScanPolicy<512,
+                                            23,
+                                            OffsetT,
+                                            cub::BLOCK_LOAD_WARP_TRANSPOSE,
+                                            cub::LOAD_DEFAULT,
+                                            cub::BLOCK_STORE_WARP_TRANSPOSE,
+                                            cub::BLOCK_SCAN_RAKING_MEMOIZE>;
 
-    // Downsweep policies
-    typedef cub::AgentRadixSortDownsweepPolicy<512,
-                                               23,
-                                               DominantT,
-                                               cub::BLOCK_LOAD_TRANSPOSE,
-                                               cub::LOAD_DEFAULT,
-                                               cub::RADIX_RANK_MATCH,
-                                               cub::BLOCK_SCAN_WARP_SCANS,
-                                               PRIMARY_RADIX_BITS>
-      DownsweepPolicy;
-    typedef cub::AgentRadixSortDownsweepPolicy<(sizeof(KeyT) > 1) ? 256 : 128,
-                                               47,
-                                               DominantT,
-                                               cub::BLOCK_LOAD_TRANSPOSE,
-                                               cub::LOAD_DEFAULT,
-                                               cub::RADIX_RANK_MEMOIZE,
-                                               cub::BLOCK_SCAN_WARP_SCANS,
-                                               PRIMARY_RADIX_BITS - 1>
-      AltDownsweepPolicy;
+    // No point in tuning
+    static constexpr int SINGLE_TILE_RADIX_BITS = (sizeof(KeyT) > 1) ? 6 : 5;
 
-    // Upsweep policies
-    typedef cub::AgentRadixSortUpsweepPolicy<256, 23, DominantT, cub::LOAD_DEFAULT, PRIMARY_RADIX_BITS>
-      UpsweepPolicy;
-    typedef cub::
-      AgentRadixSortUpsweepPolicy<256, 47, DominantT, cub::LOAD_DEFAULT, PRIMARY_RADIX_BITS - 1>
-        AltUpsweepPolicy;
-
-    // Single-tile policy
-    typedef cub::AgentRadixSortDownsweepPolicy<256,
-                                               19,
-                                               DominantT,
-                                               cub::BLOCK_LOAD_DIRECT,
-                                               cub::LOAD_LDG,
-                                               cub::RADIX_RANK_MEMOIZE,
-                                               cub::BLOCK_SCAN_WARP_SCANS,
-                                               SINGLE_TILE_RADIX_BITS>
-      SingleTilePolicy;
+    // No point in tuning single-tile policy
+    using SingleTilePolicy = cub::AgentRadixSortDownsweepPolicy<256,
+                                                                19,
+                                                                DominantT,
+                                                                cub::BLOCK_LOAD_DIRECT,
+                                                                cub::LOAD_LDG,
+                                                                cub::RADIX_RANK_MEMOIZE,
+                                                                cub::BLOCK_SCAN_WARP_SCANS,
+                                                                SINGLE_TILE_RADIX_BITS>;
   };
 
   using MaxPolicy = policy_t;
 };
-
-template <typename KeyT, typename ValueT, typename OffsetT>
-constexpr std::size_t max_upsweep_temp_storage_size()
-{
-  using upsweep_policy = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::UpsweepPolicy;
-  using alt_upsweep_policy =
-    typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::AltUpsweepPolicy;
-
-  using agent_radix_sort_upsweep_t = cub::AgentRadixSortUpsweep<upsweep_policy, KeyT, OffsetT>;
-  using alt_agent_radix_sort_upsweep_t =
-    cub::AgentRadixSortUpsweep<alt_upsweep_policy, KeyT, OffsetT>;
-
-  return cub::max(sizeof(typename agent_radix_sort_upsweep_t::TempStorage),
-                  sizeof(typename alt_agent_radix_sort_upsweep_t::TempStorage));
-}
-
-template <typename KeyT, typename ValueT, typename OffsetT>
-constexpr std::size_t max_downsweep_temp_storage_size()
-{
-  using downsweep_policy = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::DownsweepPolicy;
-  using alt_downsweep_policy =
-    typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::AltDownsweepPolicy;
-
-  using agent_radix_sort_downsweep_t =
-    cub::AgentRadixSortDownsweep<downsweep_policy, is_descending, KeyT, ValueT, OffsetT>;
-  using alt_agent_radix_sort_downsweep_t =
-    cub::AgentRadixSortDownsweep<alt_downsweep_policy, is_descending, KeyT, ValueT, OffsetT>;
-
-  return cub::max(sizeof(typename agent_radix_sort_downsweep_t::TempStorage),
-                  sizeof(typename alt_agent_radix_sort_downsweep_t::TempStorage));
-}
 
 template <typename KeyT, typename ValueT, typename OffsetT>
 constexpr std::size_t max_onesweep_temp_storage_size()
@@ -150,9 +83,8 @@ constexpr std::size_t max_temp_storage_size()
 {
   using policy_t = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t;
 
-  return policy_t::ONESWEEP ? max_onesweep_temp_storage_size<KeyT, ValueT, OffsetT>()
-                            : cub::max(max_upsweep_temp_storage_size<KeyT, ValueT, OffsetT>(),
-                                       max_downsweep_temp_storage_size<KeyT, ValueT, OffsetT>());
+  static_assert(policy_t::ONESWEEP);
+  return max_onesweep_temp_storage_size<KeyT, ValueT, OffsetT>();
 }
 
 template <typename KeyT, typename ValueT, typename OffsetT>
@@ -242,7 +174,9 @@ void radix_sort_values(std::integral_constant<bool, true>,
 }
 
 template <typename T, typename OffsetT>
-void radix_sort_values(std::integral_constant<bool, false>, nvbench::state &, nvbench::type_list<T, OffsetT>)
+void radix_sort_values(std::integral_constant<bool, false>,
+                       nvbench::state &,
+                       nvbench::type_list<T, OffsetT>)
 {
   (void)is_descending;
   (void)is_overwrite_ok;
@@ -260,5 +194,6 @@ void radix_sort_values(nvbench::state &state, nvbench::type_list<T, OffsetT> tl)
 
 NVBENCH_BENCH_TYPES(radix_sort_values, NVBENCH_TYPE_AXES(all_value_types, offset_types))
   .set_name("cub::DeviceRadixSort::SortPairs")
+  .set_type_axes_names({"T", "OffsetT"})
   .add_int64_power_of_two_axis("Elements", nvbench::range(16, 28, 4));
 
