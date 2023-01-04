@@ -9,9 +9,6 @@
 
 // %PARAM% TUNE_RADIX_BITS bits 5:6:7:8
 
-using src_offset_t = std::int32_t;
-using offset_t     = cub::detail::ChooseOffsetT<src_offset_t>::Type;
-
 constexpr bool is_descending   = false;
 constexpr bool is_overwrite_ok = false;
 
@@ -171,11 +168,13 @@ constexpr bool fits_in_default_shared_memory()
 }
 #endif
 
-template <typename T>
+template <typename T, typename OffsetT>
 void radix_sort_values(std::integral_constant<bool, true>,
                        nvbench::state &state,
-                       nvbench::type_list<T>)
+                       nvbench::type_list<T, OffsetT>)
 {
+  using offset_t = typename cub::detail::ChooseOffsetT<OffsetT>::Type;
+
   using key_t   = T;
   using value_t = T;
 #if !TUNE_BASE
@@ -242,22 +241,24 @@ void radix_sort_values(std::integral_constant<bool, true>,
   });
 }
 
-template <typename T>
-void radix_sort_values(std::integral_constant<bool, false>, nvbench::state &, nvbench::type_list<T>)
+template <typename T, typename OffsetT>
+void radix_sort_values(std::integral_constant<bool, false>, nvbench::state &, nvbench::type_list<T, OffsetT>)
 {
   (void)is_descending;
   (void)is_overwrite_ok;
 }
 
-template <typename T>
-void radix_sort_values(nvbench::state &state, nvbench::type_list<T> tl)
+template <typename T, typename OffsetT>
+void radix_sort_values(nvbench::state &state, nvbench::type_list<T, OffsetT> tl)
 {
+  using offset_t = typename cub::detail::ChooseOffsetT<OffsetT>::Type;
+
   radix_sort_values(std::integral_constant<bool, fits_in_default_shared_memory<T, T, offset_t>()>{},
                     state,
                     tl);
 }
 
-NVBENCH_BENCH_TYPES(radix_sort_values, NVBENCH_TYPE_AXES(all_value_types))
+NVBENCH_BENCH_TYPES(radix_sort_values, NVBENCH_TYPE_AXES(all_value_types, offset_types))
   .set_name("cub::DeviceRadixSort::SortPairs")
   .add_int64_power_of_two_axis("Elements", nvbench::range(16, 28, 4));
 
