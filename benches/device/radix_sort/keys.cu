@@ -1,7 +1,6 @@
 #include <cub/device/device_radix_sort.cuh>
 
 #include <thrust/device_vector.h>
-#include <thrust/sequence.h>
 
 #include <string>
 #include <type_traits>
@@ -14,7 +13,7 @@ using value_t  = cub::NullType;
 using offset_t = std::int32_t;
 
 constexpr bool is_descending   = false;
-constexpr bool is_overwrite_ok = true;
+constexpr bool is_overwrite_ok = false;
 
 #if !TUNE_BASE
 template <typename KeyT, typename ValueT, typename OffsetT>
@@ -192,8 +191,8 @@ void radix_sort_keys(std::integral_constant<bool, true>,
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));
   thrust::device_vector<T> buffer_1(elements);
   thrust::device_vector<T> buffer_2(elements);
-  thrust::sequence(buffer_1.begin(), buffer_1.end());
-  thrust::sequence(buffer_2.begin(), buffer_2.end());
+
+  gen(seed_t{}, buffer_1);
 
   key_t *d_buffer_1 = thrust::raw_pointer_cast(buffer_1.data());
   key_t *d_buffer_2 = thrust::raw_pointer_cast(buffer_2.data());

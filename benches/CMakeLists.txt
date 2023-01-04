@@ -21,6 +21,12 @@ set(TBM_BENCH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_custom_target(bench.all)
 
+add_library(common STATIC common.cu)
+
+find_package(CUDAToolkit REQUIRED)
+target_link_libraries(common PRIVATE CUDA::curand PUBLIC nvbench::main fmt::fmt)
+target_include_directories(common PUBLIC "${TBM_BENCH_ROOT}")
+
 function(get_test_params src labels_var defs_var)
   file(READ "${src}" file_data)
   set(param_regex "//[ ]+%PARAM%[ ]+([^ ]+)[ ]+([^ ]+)[ ]+([^\n]*)")
@@ -89,7 +95,7 @@ function(tbm_add_bench target_name_var bench_name bench_src thrust_target)
   file(MAKE_DIRECTORY "${results_dir}")
 
   add_executable(${bench_target} "${bench_src}")
-  target_link_libraries(${bench_target} ${thrust_target} nvbench::main fmt::fmt)
+  target_link_libraries(${bench_target} ${thrust_target} common)
   target_include_directories(${bench_target} PRIVATE "${TBM_BENCH_ROOT}")
   set_property(TARGET ${bench_target} PROPERTY CUDA_SEPARABLE_COMPILATION OFF)
   set_target_properties(${bench_target} PROPERTIES
