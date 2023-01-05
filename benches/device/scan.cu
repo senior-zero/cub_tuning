@@ -24,8 +24,8 @@ struct policy_hub_t
 };
 #endif
 
-template <typename T>
-static void basic(nvbench::state &state, nvbench::type_list<T>)
+template <typename T, OffsetT>
+static void basic(std::integral_constant<bool, true>, nvbench::state &state, nvbench::type_list<T, OffsetT>)
 {
   using accum_t     = T;
   using input_it_t  = const T *;
@@ -83,7 +83,23 @@ static void basic(nvbench::state &state, nvbench::type_list<T>)
   });
 }
 
-NVBENCH_BENCH_TYPES(basic, NVBENCH_TYPE_AXES(all_value_types))
+template <typename T, OffsetT>
+static void basic(std::integral_constant<bool, false>, nvbench::state &, nvbench::type_list<T, OffsetT>)
+{
+  // TODO Support
+}
+
+template <typename T, OffsetT>
+static void basic(nvbench::state &state, nvbench::type_list<T, OffsetT> tl)
+{
+  basic(
+    std::integral_constant<bool, std::is_same_v<OffsetT, std::int32_t>>()>{},
+    state,
+    tl);
+}
+
+NVBENCH_BENCH_TYPES(basic, NVBENCH_TYPE_AXES(all_value_types, offset_types))
   .set_name("cub::DeviceScan::ExclusiveSum")
+  .set_type_axes_names({"T", "OffsetT"})
   .add_int64_power_of_two_axis("Elements", nvbench::range(16, 28, 2));
 
