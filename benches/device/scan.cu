@@ -1,4 +1,5 @@
 #include <cub/device/device_scan.cuh>
+#include <type_traits>
 
 #include <common.cuh>
 
@@ -22,26 +23,64 @@ struct policy_hub_t
 
   using MaxPolicy = policy_t;
 };
-#endif
 
-template <typename T, OffsetT>
-static void basic(std::integral_constant<bool, true>, nvbench::state &state, nvbench::type_list<T, OffsetT>)
+template <typename T, typename OffsetT>
+constexpr std::size_t max_temp_storage_size()
 {
   using accum_t     = T;
   using input_it_t  = const T *;
   using output_it_t = T *;
-  using offset_t    = std::int32_t;
+  using offset_t    = OffsetT;
+  using output_t    = T;
+  using init_t      = cub::detail::InputValue<T>;
+  using op_t        = cub::Sum;
+  using policy_t    = typename policy_hub_t<accum_t>::policy_t;
+  using real_init_t = typename init_t::value_type;
+
+  using agent_scan_t =
+    cub::AgentScan<typename policy_t::ScanPolicyT, 
+                   input_it_t, 
+                   output_it_t, 
+                   op_t, 
+                   real_init_t, 
+                   offset_t, 
+                   accum_t>;
+
+  return sizeof(typename agent_scan_t::TempStorage);
+}
+
+template <typename T, typename OffsetT>
+constexpr bool fits_in_default_shared_memory()
+{
+  return max_temp_storage_size<T, OffsetT>() < 48 * 1024;
+}
+#else
+template <typename T, typename OffsetT>
+constexpr bool fits_in_default_shared_memory()
+{
+  return true;
+}
+#endif
+
+template <typename T, typename OffsetT>
+static void basic(std::integral_constant<bool, true>,
+                  nvbench::state &state,
+                  nvbench::type_list<T, OffsetT>)
+{
+  using accum_t     = T;
+  using input_it_t  = const T *;
+  using output_it_t = T *;
+  using offset_t    = OffsetT;
   using output_t    = T;
   using init_t      = cub::detail::InputValue<T>;
   using op_t        = cub::Sum;
 
 #if !TUNE_BASE
-  using policy_t    = policy_hub_t<accum_t>;
+  using policy_t = policy_hub_t<accum_t>;
   using dispatch_t =
     cub::DispatchScan<input_it_t, output_it_t, op_t, init_t, offset_t, accum_t, policy_t>;
 #else
-  using dispatch_t =
-    cub::DispatchScan<input_it_t, output_it_t, op_t, init_t, offset_t, accum_t>;
+  using dispatch_t = cub::DispatchScan<input_it_t, output_it_t, op_t, init_t, offset_t, accum_t>;
 #endif
 
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));
@@ -83,19 +122,20 @@ static void basic(std::integral_constant<bool, true>, nvbench::state &state, nvb
   });
 }
 
-template <typename T, OffsetT>
-static void basic(std::integral_constant<bool, false>, nvbench::state &, nvbench::type_list<T, OffsetT>)
+template <typename T, typename OffsetT>
+static void basic(std::integral_constant<bool, false>,
+                  nvbench::state &,
+                  nvbench::type_list<T, OffsetT>)
 {
   // TODO Support
 }
 
-template <typename T, OffsetT>
+template <typename T, typename OffsetT>
 static void basic(nvbench::state &state, nvbench::type_list<T, OffsetT> tl)
 {
-  basic(
-    std::integral_constant<bool, std::is_same_v<OffsetT, std::int32_t>>()>{},
-    state,
-    tl);
+  basic(std::integral_constant<bool, (sizeof(OffsetT) == 4) && fits_in_default_shared_memory<T, OffsetT>()>{},
+        state,
+        tl);
 }
 
 NVBENCH_BENCH_TYPES(basic, NVBENCH_TYPE_AXES(all_value_types, offset_types))
