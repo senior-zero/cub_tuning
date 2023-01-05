@@ -1,18 +1,11 @@
 #include <cub/device/device_merge_sort.cuh>
 
-#include <thrust/device_vector.h>
-#include <thrust/sequence.h>
-
-#include <string>
-#include <type_traits>
-
 #include <common.cuh>
 
-// %PARAM% TUNE_BLOCK_THREADS bt 128:256:512
-// %PARAM% TUNE_ITEMS_PER_THREAD ipt 16:17:18:19:20
+// %PARAM% TUNE_ITEMS_PER_THREAD ipt 7:8:9:10:11:12:13:14:15:16:17:18:19:20:21:22:23:24
+// %PARAM% TUNE_THREADS_PER_BLOCK tpb 64:128:256:512
 
 using value_t  = cub::NullType;
-using offset_t = std::int32_t;
 
 #if !TUNE_BASE
 template <typename KeyT>
@@ -21,7 +14,7 @@ struct policy_hub_t
   struct policy_t : cub::ChainedPolicy<300, policy_t, policy_t>
   {
     using MergeSortPolicy =
-      cub::AgentMergeSortPolicy<TUNE_BLOCK_THREADS,
+      cub::AgentMergeSortPolicy<TUNE_THREADS_PER_BLOCK,
                                 cub::Nominal4BItemsToItems<KeyT>(TUNE_ITEMS_PER_THREAD),
                                 cub::BLOCK_LOAD_WARP_TRANSPOSE,
                                 cub::LOAD_DEFAULT,
@@ -41,8 +34,8 @@ struct less_t
   }
 };
 
-template <typename T>
-void merge_sort_keys(nvbench::state &state, nvbench::type_list<T>)
+template <typename T, typename OffsetT>
+void merge_sort_keys(nvbench::state &state, nvbench::type_list<T, OffsetT>)
 {
   using key_t            = T;
   using value_t          = cub::NullType;
@@ -50,7 +43,7 @@ void merge_sort_keys(nvbench::state &state, nvbench::type_list<T>)
   using value_input_it_t = value_t *;
   using key_it_t         = key_t *;
   using value_it_t       = value_t *;
-  using offset_t         = int;
+  using offset_t         = OffsetT;
   using compare_op_t     = less_t;
 
 #if !TUNE_BASE
@@ -71,8 +64,8 @@ void merge_sort_keys(nvbench::state &state, nvbench::type_list<T>)
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));
   thrust::device_vector<T> buffer_1(elements);
   thrust::device_vector<T> buffer_2(elements);
-  thrust::sequence(buffer_1.rbegin(), buffer_1.rend());
-  thrust::sequence(buffer_2.rbegin(), buffer_2.rend());
+
+  gen(seed_t{}, buffer_1);
 
   key_t *d_buffer_1 = thrust::raw_pointer_cast(buffer_1.data());
   key_t *d_buffer_2 = thrust::raw_pointer_cast(buffer_2.data());
@@ -110,7 +103,8 @@ void merge_sort_keys(nvbench::state &state, nvbench::type_list<T>)
   });
 }
 
-NVBENCH_BENCH_TYPES(merge_sort_keys, NVBENCH_TYPE_AXES(all_value_types))
+NVBENCH_BENCH_TYPES(merge_sort_keys, NVBENCH_TYPE_AXES(all_value_types, offset_types))
   .set_name("cub::DeviceMergeSort::SortKeys")
+  .set_type_axes_names({"T", "OffsetT"})
   .add_int64_power_of_two_axis("Elements", nvbench::range(16, 28, 4));
 

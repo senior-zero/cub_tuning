@@ -1,14 +1,9 @@
 #include <cub/device/device_radix_sort.cuh>
 
-#include <thrust/device_vector.h>
-
-#include <string>
-#include <type_traits>
-
 #include <common.cuh>
 
-// %PARAM% TUNE_RADIX_BITS bits 8:16
-// %PARAM% TUNE_ITEMS_PER_THREAD ipt 9:10:11:12:13:14:15:16:17:18:19:20:21:22:23:24:25
+// %PARAM% TUNE_RADIX_BITS bits 6:7:8:9:10
+// %PARAM% TUNE_ITEMS_PER_THREAD ipt 7:8:9:10:11:12:13:14:15:16:17:18:19:20:21:22:23:24
 // %PARAM% TUNE_THREADS_PER_BLOCK tpb 128:160:192:224:256:288:320:352:384:416:448:480:512:544:576:608:640:672:704:736:768:800:832:864:896:928:960:992:1024
 
 using value_t  = cub::NullType;
@@ -77,7 +72,11 @@ constexpr std::size_t max_onesweep_temp_storage_size()
   using agent_radix_sort_onesweep_t = cub::
     AgentRadixSortOnesweep<onesweep_policy, is_descending, KeyT, ValueT, OffsetT, portion_offset>;
 
-  return sizeof(typename agent_radix_sort_onesweep_t::TempStorage);
+  using hist_policy = typename policy_hub_t<KeyT, ValueT, OffsetT>::policy_t::HistogramPolicy;
+  using hist_agent = cub::AgentRadixSortHistogram<hist_policy, is_descending, KeyT, OffsetT>;
+
+  return cub::max(sizeof(typename agent_radix_sort_onesweep_t::TempStorage),
+                  sizeof(typename hist_agent::TempStorage));
 }
 
 template <typename KeyT, typename ValueT, typename OffsetT>
