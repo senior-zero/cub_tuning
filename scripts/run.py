@@ -53,6 +53,7 @@ def tune(result_dir_base):
                     bench_name = os.path.basename(bench_path)
                     result_path = os.path.join(result_dir, bench_name + ".json")
 
+                    tqdm.write(bench_path)
                     cmdline = [bench_path, "--json", result_path, "--device", "0"]
                     cmdline = cmdline + ["-a", "T={}".format(T)]
                     cmdline = cmdline + ["-a", "OffsetT={}".format(OffsetT)]
