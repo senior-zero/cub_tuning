@@ -2,6 +2,8 @@
 
 import os
 import math
+import matplotlib.pyplot as plt
+import seaborn as sns
 from nvbench_json import reader
 
 result_dir = 'build/result'
@@ -239,6 +241,9 @@ def compare(base, variant):
     return compare_benches(ref_root["benchmarks"], cmp_root["benchmarks"], 0.0)
 
 
+plot = False
+
+
 for case in results:
     for algorithm in results[case]:
         data = results[case][algorithm]
@@ -250,6 +255,10 @@ for case in results:
         best_avg_variant = base
         best_min = magic_value
         best_avg = magic_value
+
+        if plot:
+            to_plot_keys = []
+            to_plot_vals = []
 
         for variant in data['variants']:
             try:
@@ -263,8 +272,17 @@ for case in results:
                     if variant_avg < best_avg:
                         best_avg = variant_avg
                         best_avg_variant = variant
+                    if plot:
+                        to_plot_keys.append(variant) 
+                        to_plot_vals.append(variant_avg)
             except Exception:
                 pass
+
+        if plot:
+            if len(to_plot_keys):
+                g = sns.barplot(x=to_plot_keys, y=to_plot_vals)
+                g.set_xticklabels(labels=to_plot_keys, rotation=15, ha='right', fontsize=6)
+                plt.show()
 
         if best_min != magic_value:
             print("{} ({}): min={} ({})".format(algorithm, case, best_min, best_min_variant))
