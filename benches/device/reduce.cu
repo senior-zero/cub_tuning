@@ -1,14 +1,9 @@
 #include <cub/device/device_reduce.cuh>
 
-#include <thrust/device_vector.h>
-#include <thrust/fill.h>
-
-#include <string>
-
 #include <common.cuh>
 
-// %PARAM% TUNE_BLOCK_THREADS bt 128:256
-// %PARAM% TUNE_ITEMS_PER_THREAD ipt 16:20
+// %PARAM% TUNE_ITEMS_PER_THREAD ipt 7:8:9:10:11:12:13:14:15:16:17:18:19:20:21:22:23:24
+// %PARAM% TUNE_THREADS_PER_BLOCK tpb 128:160:192:224:256:288:320:352:384:416:448:480:512:544:576:608:640:672:704:736:768:800:832:864:896:928:960:992:1024
 // %PARAM% TUNE_ITEMS_PER_VEC_LOAD ipv 1:2:4
 
 #if !TUNE_BASE
@@ -17,7 +12,7 @@ struct policy_hub_t
 {
   struct policy_t : cub::ChainedPolicy<300, policy_t, policy_t>
   {
-    static constexpr int threads_per_block  = TUNE_BLOCK_THREADS;
+    static constexpr int threads_per_block  = TUNE_THREADS_PER_BLOCK;
     static constexpr int items_per_thread   = TUNE_ITEMS_PER_THREAD;
     static constexpr int items_per_vec_load = TUNE_ITEMS_PER_VEC_LOAD;
 
@@ -39,13 +34,13 @@ struct policy_hub_t
 };
 #endif
 
-template <typename T>
-void reduce(nvbench::state &state, nvbench::type_list<T>)
+template <typename T, typename OffsetT>
+void reduce(nvbench::state &state, nvbench::type_list<T, OffsetT>)
 {
   using accum_t     = T;
   using input_it_t  = const T *;
   using output_it_t = T *;
-  using offset_t    = std::int32_t;
+  using offset_t    = typename cub::detail::ChooseOffsetT<OffsetT>::Type;
   using output_t    = T;
   using init_t      = T;
   using op_t        = cub::Sum;
@@ -61,8 +56,9 @@ void reduce(nvbench::state &state, nvbench::type_list<T>)
   // Retrieve axis parameters
   const auto elements = static_cast<std::size_t>(state.get_int64("Elements"));
   thrust::device_vector<T> in(elements);
-  thrust::fill(in.begin(), in.begin() + elements / 2, T{1});
   thrust::device_vector<T> out(1);
+
+  gen(seed_t{}, in);
 
   input_it_t d_in   = thrust::raw_pointer_cast(in.data());
   output_it_t d_out = thrust::raw_pointer_cast(out.data());
@@ -98,7 +94,8 @@ void reduce(nvbench::state &state, nvbench::type_list<T>)
   });
 }
 
-NVBENCH_BENCH_TYPES(reduce, NVBENCH_TYPE_AXES(all_value_types))
+NVBENCH_BENCH_TYPES(reduce, NVBENCH_TYPE_AXES(all_value_types, offset_types))
   .set_name("cub::DeviceReduce::Reduce")
+  .set_type_axes_names({"T", "OffsetT"})
   .add_int64_power_of_two_axis("Elements", nvbench::range(16, 28, 4));
 

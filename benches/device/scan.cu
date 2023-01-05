@@ -1,13 +1,9 @@
 #include <cub/device/device_scan.cuh>
 
-#include <thrust/detail/raw_pointer_cast.h>
-#include <thrust/device_vector.h>
-#include <thrust/sequence.h>
-
 #include <common.cuh>
 
-// %PARAM% TUNE_BLOCK_THREADS bt 128:256
-// %PARAM% TUNE_ITEMS_PER_THREAD ipt 12:15
+// %PARAM% TUNE_ITEMS_PER_THREAD ipt 7:8:9:10:11:12:13:14:15:16:17:18:19:20:21:22:23:24
+// %PARAM% TUNE_THREADS_PER_BLOCK tpb 128:160:192:224:256:288:320:352:384:416:448:480:512:544:576:608:640:672:704:736:768:800:832:864:896:928:960:992:1024
 
 #if !TUNE_BASE
 template <typename AccumT>
@@ -15,7 +11,7 @@ struct policy_hub_t
 {
   struct policy_t : cub::ChainedPolicy<300, policy_t, policy_t>
   {
-    using ScanPolicyT = cub::AgentScanPolicy<TUNE_BLOCK_THREADS,
+    using ScanPolicyT = cub::AgentScanPolicy<TUNE_THREADS_PER_BLOCK,
                                              TUNE_ITEMS_PER_THREAD,
                                              AccumT,
                                              cub::BLOCK_LOAD_WARP_TRANSPOSE,
@@ -52,7 +48,8 @@ static void basic(nvbench::state &state, nvbench::type_list<T>)
 
   thrust::device_vector<T> input(elements);
   thrust::device_vector<T> output(elements);
-  thrust::sequence(input.begin(), input.end());
+
+  gen(seed_t{}, input);
 
   T *d_input  = thrust::raw_pointer_cast(input.data());
   T *d_output = thrust::raw_pointer_cast(output.data());
