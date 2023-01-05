@@ -24,7 +24,7 @@ def get_algorithm_name(file):
 
 for root, folders, files in os.walk(result_dir):
     for file in files:
-        if not file.endswith(".json"):
+        if not file.endswith('.json'):
             continue
 
         if root not in results:
@@ -33,9 +33,12 @@ for root, folders, files in os.walk(result_dir):
         algorithm = get_algorithm_name(file)
 
         if algorithm not in results[root]:
-            results[root][algorithm] = []
+            results[root][algorithm] = {'base': '', 'variants': []}
 
-        results[root][algorithm].append(os.path.join(root, file))
+        if file.endswith('.base.json'):
+            results[root][algorithm]['base'] = os.path.join(root, file)
+        else:
+            results[root][algorithm]['variants'].append(os.path.join(root, file))
 
 print(json.dumps(results, indent=2))
 
