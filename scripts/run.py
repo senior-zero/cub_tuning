@@ -53,12 +53,15 @@ def tune(result_dir_base):
                     bench_name = os.path.basename(bench_path)
                     result_path = os.path.join(result_dir, bench_name + ".json")
 
-                    tqdm.write(bench_path)
                     cmdline = [bench_path, "--json", result_path, "--device", "0"]
                     cmdline = cmdline + ["-a", "T={}".format(T)]
                     cmdline = cmdline + ["-a", "OffsetT={}".format(OffsetT)]
                     cmdline = cmdline + ["-a", "Elements[pow2]={}".format(Elements)]
-                    subprocess.run(cmdline, stdout=subprocess.DEVNULL)
+
+                    try:
+                        subprocess.run(cmdline, timeout=180, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except subprocess.TimeoutExpired:
+                        tqdm.write("hang: {}".format(bench_path))
 
 
 def run_as_root(cmdline):
