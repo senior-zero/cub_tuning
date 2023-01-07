@@ -8,9 +8,9 @@ from tqdm import tqdm
 
 
 bin_dir = 'build/bin'
-cases = itertools.product(['I32', 'I64', 'I16', 'I8', 'I128'],  # T
-                          ['I32', 'I64'],  # OffsetT
-                          ['28', '24', '20', '16'])  # Elements
+Ts = ['I32', 'I64', 'I16', 'I8', 'I128']
+OffsetTs = ['I32', 'I64']
+ProblemSizes = ['28', '24', '20', '16']
 
 
 def get_result_dir(result_dir_base, T, OffsetT, Elements):
@@ -51,7 +51,7 @@ def can_skip_bench(bench_name, result_path):
 def run_bench(result_dir_base, bench_path, base_elapsed={}):
     elapsed = {}
 
-    for T, OffsetT, Elements in cases:
+    for T, OffsetT, Elements in itertools.product(Ts, OffsetTs, ProblemSizes):
         result_dir = get_result_dir(
             result_dir_base, T, OffsetT, Elements)
         if not os.path.exists(result_dir):
@@ -63,7 +63,7 @@ def run_bench(result_dir_base, bench_path, base_elapsed={}):
         if can_skip_bench(bench_name, result_path):
             continue
 
-        cmd = [bench_path, "--json", result_path]
+        cmd = [bench_path, "--jsonbin", result_path]
         cmd = cmd + ["--device", "0"]
         cmd = cmd + ["-a", "T={}".format(T)]
         cmd = cmd + ["-a", "OffsetT={}".format(OffsetT)]
@@ -74,7 +74,7 @@ def run_bench(result_dir_base, bench_path, base_elapsed={}):
 
         timeout = None
         if lbl in base_elapsed:
-            timeout = base_elapsed[lbl] * 4
+            timeout = base_elapsed[lbl] * 8
 
         try:
             begin = time.time()
@@ -123,7 +123,7 @@ def tune(result_dir_base):
 
     print('run bases:')
     for bench_path in tqdm(bases):
-        timeouts[bench_path.removesuffix('.base')] = run_bench(
+        timeouts[bench_path.removesuffix('base')] = run_bench(
             result_dir_base, bench_path)
 
     print('run variants:')
