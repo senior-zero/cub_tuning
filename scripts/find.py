@@ -1,18 +1,31 @@
 #!/bin/env python3
 
 import os
+import json
 import numpy as np
 import statistics
-import itertools
 from nvbench_json import reader
 from scipy.stats import mannwhitneyu
 
 
 Ts = ['I32', 'I64', 'I16', 'I8', 'I128']
 OffsetTs = ['I32', 'I64']
-ProblemSizes = ['28', '24', '20', '16']
+ProblemSizes = ['16', '20', '24', '28']
 result_dir = 'build/result'
-results = {}
+
+
+def get_element_to_weight_mapping():
+    np.random.seed(42)
+    weights = np.sort(np.random.dirichlet([x**2 for x in range(1, len(ProblemSizes) + 1)], size=1))[0]
+
+    element_to_weight = {}
+    for EID, Elements in enumerate(ProblemSizes):
+        element_to_weight[Elements] = weights[EID]
+
+    return element_to_weight
+
+
+ElementToWeight = get_element_to_weight_mapping()
 
 
 def extract_filename(summary):
@@ -43,26 +56,6 @@ def get_algorithm_name(file):
             last_name_attr = max(last_name_attr, aid)
 
     return '.'.join(attrs[2:last_name_attr+1])
-
-
-for root, folders, files in os.walk(result_dir):
-    for file in files:
-        if not file.endswith('.json'):
-            continue
-
-        if root not in results:
-            results[root] = {}
-
-        algorithm = get_algorithm_name(file)
-
-        if algorithm not in results[root]:
-            results[root][algorithm] = {'base': '', 'variants': []}
-
-        if file.endswith('.base.json'):
-            results[root][algorithm]['base'] = os.path.join(root, file)
-        else:
-            results[root][algorithm]['variants'].append(
-                os.path.join(root, file))
 
 
 def find_matching_bench(needle, haystack):
@@ -144,10 +137,9 @@ def compare(base, variant):
 
             if len(ref_samples) > 0:
                 if len(cmp_samples) > 0:
-                    # H0: the distribution underlying `ref_samples` is not stochastically greater
-                    # H1: the distribution underlying `ref_samples` is stochastically greater
-                    _, p = mannwhitneyu(
-                        ref_samples, cmp_samples, alternative='greater')
+                    # H0: the distributions are not different
+                    # H1: the distribution are different
+                    _, p = mannwhitneyu(ref_samples, cmp_samples)
 
                     ref_median = statistics.median(ref_samples)
                     cmp_median = statistics.median(cmp_samples)
@@ -155,40 +147,73 @@ def compare(base, variant):
                     diff = cmp_median - ref_median
                     frac_diff = diff / ref_median
 
+                    # Reject H0
                     if p < alpha:
-                        # Reject H0
                         stat.append(frac_diff * 100)
 
     return stat
 
 
-for case in results:
-    for algorithm in results[case]:
-        data = results[case][algorithm]
-        base = data['base']
+for T in Ts:
+    for OffsetT in OffsetTs:
+        speedups = {}
+        for Elements in ProblemSizes:
+            results = {}
+            case_dir = os.path.join(result_dir, 'tdp')
+            case_dir = os.path.join(case_dir, T)
+            case_dir = os.path.join(case_dir, OffsetT)
+            case_dir = os.path.join(case_dir, Elements)
 
-        magic_value = 424242424242
+            for root, folders, files in os.walk(case_dir):
+                for file in files:
+                    if not file.endswith('.json'):
+                        continue
 
-        best_min_variant = base
-        best_avg_variant = base
-        best_min = magic_value
-        best_avg = magic_value
+                    algorithm = get_algorithm_name(file)
 
-        for variant in data['variants']:
-            try:
-                frac_diffs = compare(base, variant)
-                if len(frac_diffs):
-                    variant_min = min(frac_diffs)
-                    variant_avg = sum(frac_diffs) / len(frac_diffs)
-                    if variant_min < best_min:
-                        best_min = variant_min
-                        best_min_variant = variant
-                    if variant_avg < best_avg:
-                        best_avg = variant_avg
-                        best_avg_variant = variant
-            except Exception:
-                pass
+                    if algorithm not in results:
+                        results[algorithm] = {'base': '', 'variants': []}
 
-        if best_min != magic_value:
-            print("{} ({}): min={} ({})".format(
-                algorithm, case, best_min, best_min_variant))
+                    if file.endswith('.base.json'):
+                        results[algorithm]['base'] = file
+                    else:
+                        results[algorithm]['variants'].append(file)
+
+            root = os.path.join(result_dir, 'tdp')
+            root = os.path.join(root, T)
+            root = os.path.join(root, OffsetT)
+            root = os.path.join(root, Elements)
+
+            for algorithm in results:
+                data = results[algorithm]
+                base = data['base']
+
+                for variant in data['variants']:
+                    try:
+                        frac_diffs = compare(os.path.join(root, base), os.path.join(root, variant))
+                        if len(frac_diffs):
+                            if algorithm not in speedups:
+                                speedups[algorithm] = {}
+                            if variant not in speedups[algorithm]:
+                                speedups[algorithm][variant] = {}
+                            speedups[algorithm][variant][Elements] = frac_diffs
+
+                    except Exception:
+                        pass
+        
+        print("T={}; OffsetT={};".format(T, OffsetT))
+        for algorithm in speedups:
+            scores = {}
+
+            for variant in speedups[algorithm]:
+                score = 0.0
+
+                for Elements in speedups[algorithm][variant]:
+                    for Speedup in speedups[algorithm][variant][Elements]:
+                        score = score + Speedup * ElementToWeight[Elements]
+
+                scores[variant] = score
+
+            best_variant = min(scores, key=scores.get)
+            print("\t{} / {}: {}".format(algorithm, best_variant.replace("bench.device.", "").replace(algorithm + '.', '').replace('.json', ''), scores[best_variant]))
+
