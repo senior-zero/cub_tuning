@@ -1,14 +1,16 @@
 #!/bin/env python3
 
 import os
-import math
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import statistics
+import itertools
 from nvbench_json import reader
 from scipy.stats import mannwhitneyu
 
+
+Ts = ['I32', 'I64', 'I16', 'I8', 'I128']
+OffsetTs = ['I32', 'I64']
+ProblemSizes = ['28', '24', '20', '16']
 result_dir = 'build/result'
 results = {}
 
@@ -16,14 +18,14 @@ results = {}
 def extract_filename(summary):
     summary_data = summary["data"]
     value_data = next(filter(lambda v: v["name"] == "filename", summary_data))
-    assert(value_data["type"] == "string")
+    assert (value_data["type"] == "string")
     return value_data["value"]
 
 
 def extract_size(summary):
     summary_data = summary["data"]
     value_data = next(filter(lambda v: v["name"] == "size", summary_data))
-    assert(value_data["type"] == "int64")
+    assert (value_data["type"] == "int64")
     return int(value_data["value"])
 
 
@@ -59,17 +61,8 @@ for root, folders, files in os.walk(result_dir):
         if file.endswith('.base.json'):
             results[root][algorithm]['base'] = os.path.join(root, file)
         else:
-            results[root][algorithm]['variants'].append(os.path.join(root, file))
-
-
-def version_tuple(v):
-    return tuple(map(int, (v.split("."))))
-
-
-config_count = 0
-unknown_count = 0
-failure_count = 0
-pass_count = 0
+            results[root][algorithm]['variants'].append(
+                os.path.join(root, file))
 
 
 def find_matching_bench(needle, haystack):
@@ -77,66 +70,6 @@ def find_matching_bench(needle, haystack):
         if hay["name"] == needle["name"] and hay["axes"] == needle["axes"]:
             return hay
     return None
-
-
-def format_int64_axis_value(axis_name, axis_value, axes):
-    axis = next(filter(lambda ax: ax["name"] == axis_name, axes))
-    axis_flags = axis["flags"]
-    value = int(axis_value["value"])
-    if axis_flags == "pow2":
-        value = math.log2(value)
-        return "2^%d" % value
-    return "%d" % value
-
-
-def format_float64_axis_value(axis_name, axis_value, axes):
-    return "%.5g" % float(axis_value["value"])
-
-
-def format_type_axis_value(axis_name, axis_value, axes):
-    return "%s" % axis_value["value"]
-
-
-def format_string_axis_value(axis_name, axis_value, axes):
-    return "%s" % axis_value["value"]
-
-
-def format_axis_value(axis_name, axis_value, axes):
-    axis = next(filter(lambda ax: ax["name"] == axis_name, axes))
-    axis_type = axis["type"]
-    if axis_type == "int64":
-        return format_int64_axis_value(axis_name, axis_value, axes)
-    elif axis_type == "float64":
-        return format_float64_axis_value(axis_name, axis_value, axes)
-    elif axis_type == "type":
-        return format_type_axis_value(axis_name, axis_value, axes)
-    elif axis_type == "string":
-        return format_string_axis_value(axis_name, axis_value, axes)
-
-
-def format_duration(seconds):
-    if seconds >= 1:
-        multiplier = 1.0
-        units = "s"
-    elif seconds >= 1e-3:
-        multiplier = 1e3
-        units = "ms"
-    elif seconds >= 1e-6:
-        multiplier = 1e6
-        units = "us"
-    else:
-        multiplier = 1e6
-        units = "us"
-    return "%0.3f %s" % (seconds * multiplier, units)
-
-
-def format_percentage(percentage):
-    # When there aren't enough samples for a meaningful noise measurement,
-    # the noise is recorded as infinity. Unfortunately, JSON spec doesn't
-    # allow for inf, so these get turned into null.
-    if percentage is None:
-        return "inf"
-    return "%0.2f%%" % (percentage * 100.0)
 
 
 def parse_samples_meta(state):
@@ -211,9 +144,10 @@ def compare(base, variant):
 
             if len(ref_samples) > 0:
                 if len(cmp_samples) > 0:
-                    # H0: the distribution underlying `ref_samples` is not stochastically greater 
-                    # H1: the distribution underlying `ref_samples` is stochastically greater 
-                    _, p = mannwhitneyu(ref_samples, cmp_samples, alternative='greater')
+                    # H0: the distribution underlying `ref_samples` is not stochastically greater
+                    # H1: the distribution underlying `ref_samples` is stochastically greater
+                    _, p = mannwhitneyu(
+                        ref_samples, cmp_samples, alternative='greater')
 
                     ref_median = statistics.median(ref_samples)
                     cmp_median = statistics.median(cmp_samples)
@@ -228,9 +162,6 @@ def compare(base, variant):
     return stat
 
 
-plot = False
-
-
 for case in results:
     for algorithm in results[case]:
         data = results[case][algorithm]
@@ -242,10 +173,6 @@ for case in results:
         best_avg_variant = base
         best_min = magic_value
         best_avg = magic_value
-
-        if plot:
-            to_plot_keys = []
-            to_plot_vals = []
 
         for variant in data['variants']:
             try:
@@ -259,18 +186,9 @@ for case in results:
                     if variant_avg < best_avg:
                         best_avg = variant_avg
                         best_avg_variant = variant
-                    if plot:
-                        to_plot_keys.append(variant) 
-                        to_plot_vals.append(variant_avg)
             except Exception:
                 pass
 
-        if plot:
-            if len(to_plot_keys):
-                g = sns.barplot(x=to_plot_keys, y=to_plot_vals)
-                g.set_xticklabels(labels=to_plot_keys, rotation=15, ha='right', fontsize=6)
-                plt.show()
-
         if best_min != magic_value:
-            print("{} ({}): min={} ({})".format(algorithm, case, best_min, best_min_variant))
-
+            print("{} ({}): min={} ({})".format(
+                algorithm, case, best_min, best_min_variant))
