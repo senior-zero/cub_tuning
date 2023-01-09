@@ -1,11 +1,11 @@
 #!/bin/env python3
 
 import os
-import json
 import numpy as np
 import statistics
 from nvbench_json import reader
 from scipy.stats import mannwhitneyu
+from tabulate import tabulate
 
 
 Ts = ['I32', 'I64', 'I16', 'I8', 'I128']
@@ -16,7 +16,7 @@ result_dir = 'build/result'
 
 def get_element_to_weight_mapping():
     np.random.seed(42)
-    weights = np.sort(np.random.dirichlet([x**2 for x in range(1, len(ProblemSizes) + 1)], size=1))[0]
+    weights = np.sort(np.random.dirichlet([x * 4 for x in range(1, len(ProblemSizes) + 1)], size=1))[0]
 
     element_to_weight = {}
     for EID, Elements in enumerate(ProblemSizes):
@@ -157,6 +157,7 @@ def compare(base, variant):
 for T in Ts:
     for OffsetT in OffsetTs:
         speedups = {}
+
         for Elements in ProblemSizes:
             results = {}
             case_dir = os.path.join(result_dir, 'tdp')
@@ -201,6 +202,7 @@ for T in Ts:
                     except Exception:
                         pass
         
+        table = []
         print("T={}; OffsetT={};".format(T, OffsetT))
         for algorithm in speedups:
             scores = {}
@@ -208,12 +210,19 @@ for T in Ts:
             for variant in speedups[algorithm]:
                 score = 0.0
 
+                if len(speedups[algorithm][variant]) != len(ProblemSizes):
+                    continue
+
                 for Elements in speedups[algorithm][variant]:
                     for Speedup in speedups[algorithm][variant][Elements]:
                         score = score + Speedup * ElementToWeight[Elements]
 
                 scores[variant] = score
 
-            best_variant = min(scores, key=scores.get)
-            print("\t{} / {}: {}".format(algorithm, best_variant.replace("bench.device.", "").replace(algorithm + '.', '').replace('.json', ''), scores[best_variant]))
+            if len(scores):
+                best_variant = min(scores, key=scores.get)
+                best_variant_short_name = best_variant.replace("bench.device.", "").replace(algorithm + '.', '').replace('.json', '')
+                speedup = speedups[algorithm][best_variant]
+                table.append([algorithm, best_variant_short_name, scores[best_variant], speedup['16'], speedup['20'], speedup['24'], speedup['28']])
+        print(tabulate(table))
 
