@@ -2,12 +2,30 @@
 
 import os
 import math
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import statistics
 from nvbench_json import reader
+from scipy.stats import mannwhitneyu
 
 result_dir = 'build/result'
 results = {}
+
+
+def extract_filename(summary):
+    summary_data = summary["data"]
+    value_data = next(filter(lambda v: v["name"] == "filename", summary_data))
+    assert(value_data["type"] == "string")
+    return value_data["value"]
+
+
+def extract_size(summary):
+    summary_data = summary["data"]
+    value_data = next(filter(lambda v: v["name"] == "size", summary_data))
+    assert(value_data["type"] == "int64")
+    return int(value_data["value"])
+
 
 def get_algorithm_name(file):
     attrs = file.split('.')
@@ -48,7 +66,6 @@ def version_tuple(v):
     return tuple(map(int, (v.split("."))))
 
 
-all_devices = []
 config_count = 0
 unknown_count = 0
 failure_count = 0
@@ -122,123 +139,93 @@ def format_percentage(percentage):
     return "%0.2f%%" % (percentage * 100.0)
 
 
-def compare_benches(ref_benches, cmp_benches, threshold):
-    stat = []
+def parse_samples_meta(state):
+    summaries = state["summaries"]
+    if not summaries:
+        return None, None
 
-    for cmp_bench in cmp_benches:
-        ref_bench = find_matching_bench(cmp_bench, ref_benches)
-        if not ref_bench:
-            continue
+    summary = next(filter(lambda s: s["tag"] == "nv/json/bin:nv/cold/sample_times",
+                          summaries),
+                   None)
+    if not summary:
+        return None, None
 
-        device_ids = cmp_bench["devices"]
-        axes = cmp_bench["axes"]
-        ref_states = ref_bench["states"]
-        cmp_states = cmp_bench["states"]
+    sample_filename = extract_filename(summary)
+    sample_count = extract_size(summary)
+    return sample_count, sample_filename
 
-        axes = axes if axes else []
 
-        headers = [x["name"] for x in axes]
-        colalign = ["center"] * len(headers)
+def parse_samples(state):
+    sample_count, samples_filename = parse_samples_meta(state)
+    if not sample_count or not samples_filename:
+        return []
 
-        headers.append("Ref Time")
-        colalign.append("right")
-        headers.append("Ref Noise")
-        colalign.append("right")
-        headers.append("Cmp Time")
-        colalign.append("right")
-        headers.append("Cmp Noise")
-        colalign.append("right")
-        headers.append("Diff")
-        colalign.append("right")
-        headers.append("%Diff")
-        colalign.append("right")
-        headers.append("Status")
-        colalign.append("center")
+    with open(samples_filename, "rb") as f:
+        samples = np.fromfile(f, "<f4")
 
-        for device_id in device_ids:
-
-            rows = []
-            for cmp_state in cmp_states:
-                cmp_state_name = cmp_state["name"]
-                ref_state = next(filter(lambda st: st["name"] == cmp_state_name,
-                                        ref_states),
-                                 None)
-                if not ref_state:
-                    continue
-
-                axis_values = cmp_state["axis_values"]
-                if not axis_values:
-                    axis_values = []
-
-                cmp_summaries = cmp_state["summaries"]
-                ref_summaries = ref_state["summaries"]
-
-                if not ref_summaries or not cmp_summaries:
-                    continue
-
-                def lookup_summary(summaries, tag):
-                    return next(filter(lambda s: s["tag"] == tag, summaries), None)
-
-                cmp_time_summary = lookup_summary(cmp_summaries, "nv/cold/time/gpu/mean")
-                ref_time_summary = lookup_summary(ref_summaries, "nv/cold/time/gpu/mean")
-                cmp_noise_summary = lookup_summary(cmp_summaries, "nv/cold/time/gpu/stdev/relative")
-                ref_noise_summary = lookup_summary(ref_summaries, "nv/cold/time/gpu/stdev/relative")
-
-                # TODO: Use other timings, too. Maybe multiple rows, with a
-                # "Timing" column + values "CPU/GPU/Batch"?
-                if not all([cmp_time_summary,
-                            ref_time_summary,
-                            cmp_noise_summary,
-                            ref_noise_summary]):
-                    continue
-
-                def extract_value(summary):
-                    summary_data = summary["data"]
-                    value_data = next(filter(lambda v: v["name"] == "value", summary_data))
-                    assert(value_data["type"] == "float64")
-                    return value_data["value"]
-
-                cmp_time = extract_value(cmp_time_summary)
-                ref_time = extract_value(ref_time_summary)
-                cmp_noise = extract_value(cmp_noise_summary)
-                ref_noise = extract_value(ref_noise_summary)
-
-                # Convert string encoding to expected numerics:
-                cmp_time = float(cmp_time)
-                ref_time = float(ref_time)
-
-                diff = cmp_time - ref_time
-                frac_diff = diff / ref_time
-
-                stat.append(frac_diff * 100)
-
-                if ref_noise and cmp_noise:
-                    ref_noise = float(ref_noise)
-                    cmp_noise = float(cmp_noise)
-                    min_noise = min(ref_noise, cmp_noise)
-                elif ref_noise:
-                    ref_noise = float(ref_noise)
-                    min_noise = ref_noise
-                elif cmp_noise:
-                    cmp_noise = float(cmp_noise)
-                    min_noise = cmp_noise
-                else:
-                    min_noise = None  # Noise is inf
-
-            if len(rows) == 0:
-                continue
-
-    return stat
+    assert (sample_count == len(samples))
+    return samples
 
 
 def compare(base, variant):
     ref_root = reader.read_file(base)
     cmp_root = reader.read_file(variant)
 
-    global all_devices
-    all_devices = cmp_root["devices"]
+    ref_benches = ref_root["benchmarks"]
+    cmp_benches = cmp_root["benchmarks"]
 
-    return compare_benches(ref_root["benchmarks"], cmp_root["benchmarks"], 0.0)
+    stat = []
+    alpha = 0.05
+
+    for cmp_bench in cmp_benches:
+        ref_bench = find_matching_bench(cmp_bench, ref_benches)
+        if not ref_bench:
+            continue
+
+        axes = cmp_bench["axes"]
+        ref_states = ref_bench["states"]
+        cmp_states = cmp_bench["states"]
+
+        axes = axes if axes else []
+
+        for cmp_state in cmp_states:
+            cmp_state_name = cmp_state["name"]
+            ref_state = next(filter(lambda st: st["name"] == cmp_state_name,
+                                    ref_states),
+                             None)
+            if not ref_state:
+                continue
+
+            axis_values = cmp_state["axis_values"]
+            if not axis_values:
+                axis_values = []
+
+            cmp_summaries = cmp_state["summaries"]
+            ref_summaries = ref_state["summaries"]
+
+            if not ref_summaries or not cmp_summaries:
+                continue
+
+            ref_samples = parse_samples(ref_state)
+            cmp_samples = parse_samples(cmp_state)
+
+            if len(ref_samples) > 0:
+                if len(cmp_samples) > 0:
+                    # H0: the distribution underlying `ref_samples` is not stochastically greater 
+                    # H1: the distribution underlying `ref_samples` is stochastically greater 
+                    _, p = mannwhitneyu(ref_samples, cmp_samples, alternative='greater')
+
+                    ref_median = statistics.median(ref_samples)
+                    cmp_median = statistics.median(cmp_samples)
+
+                    diff = cmp_median - ref_median
+                    frac_diff = diff / ref_median
+
+                    if p < alpha:
+                        # Reject H0
+                        stat.append(frac_diff * 100)
+
+    return stat
 
 
 plot = False
