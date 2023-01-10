@@ -1,14 +1,23 @@
 #!/bin/env python3
 
 import os
+import argparse
 import numpy as np
-import statistics
 import importlib
 from nvbench_json import reader
 from tabulate import tabulate
 
-compare_distributions = importlib. import_module('compare.mannwhitneyu')
+parser = argparse.ArgumentParser()
+parser.add_argument('--compare', type=str, default='compare.mannwhitneyu')
+parser.add_argument('--center', type=str, default='center.median')
+
+args = parser.parse_args()
+
+compare_distributions = importlib.import_module(args.compare)
 distributions_are_different = compare_distributions.distributions_are_different 
+
+center_of_distribution = importlib.import_module(args.center)
+center = center_of_distribution.center
 
 Ts = ['I32', 'I64', 'I16', 'I8', 'I128']
 OffsetTs = ['I32', 'I64']
@@ -138,8 +147,8 @@ def compare(base, variant):
             if len(ref_samples) > 0:
                 if len(cmp_samples) > 0:
                     if distributions_are_different(ref_samples, cmp_samples):
-                        ref_median = statistics.median(ref_samples)
-                        cmp_median = statistics.median(cmp_samples)
+                        ref_median = center(ref_samples)
+                        cmp_median = center(cmp_samples)
 
                         diff = cmp_median - ref_median
                         frac_diff = diff / ref_median
