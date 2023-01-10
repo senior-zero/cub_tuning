@@ -72,8 +72,9 @@ def parse_json(filename):
             else:
                 print(filename, len(samples), "not gaussian") # Reject H0, doesn\'t look Gaussian
 
-            sns.histplot(data=samples)
-            plt.show()
+            print(','.join([filename] + [str(x) for x in samples.tolist()]))
+            # sns.histplot(data=samples)
+            # plt.show()
 
 
 for root, folders, files in os.walk('build/result'):

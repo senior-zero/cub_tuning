@@ -3,10 +3,12 @@
 import os
 import numpy as np
 import statistics
+import importlib
 from nvbench_json import reader
-from scipy.stats import mannwhitneyu
 from tabulate import tabulate
 
+compare_distributions = importlib. import_module('compare.mannwhitneyu')
+distributions_are_different = compare_distributions.distributions_are_different 
 
 Ts = ['I32', 'I64', 'I16', 'I8', 'I128']
 OffsetTs = ['I32', 'I64']
@@ -101,8 +103,6 @@ def compare(base, variant):
     cmp_benches = cmp_root["benchmarks"]
 
     stat = []
-    alpha = 0.05
-
     for cmp_bench in cmp_benches:
         ref_bench = find_matching_bench(cmp_bench, ref_benches)
         if not ref_bench:
@@ -137,18 +137,13 @@ def compare(base, variant):
 
             if len(ref_samples) > 0:
                 if len(cmp_samples) > 0:
-                    # H0: the distributions are not different
-                    # H1: the distribution are different
-                    _, p = mannwhitneyu(ref_samples, cmp_samples)
+                    if distributions_are_different(ref_samples, cmp_samples):
+                        ref_median = statistics.median(ref_samples)
+                        cmp_median = statistics.median(cmp_samples)
 
-                    ref_median = statistics.median(ref_samples)
-                    cmp_median = statistics.median(cmp_samples)
+                        diff = cmp_median - ref_median
+                        frac_diff = diff / ref_median
 
-                    diff = cmp_median - ref_median
-                    frac_diff = diff / ref_median
-
-                    # Reject H0
-                    if p < alpha:
                         stat.append(frac_diff * 100)
 
     return stat
