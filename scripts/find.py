@@ -73,13 +73,6 @@ def get_algorithm_name(file):
     return '.'.join(attrs[2:last_name_attr+1])
 
 
-def find_matching_bench(needle, haystack):
-    for hay in haystack:
-        if hay["name"] == needle["name"] and hay["axes"] == needle["axes"]:
-            return hay
-    return None
-
-
 def parse_samples_meta(state):
     summaries = state["summaries"]
     if not summaries:
@@ -108,68 +101,68 @@ def parse_samples(state):
     return samples
 
 
-def compare(root, base, variant):
-    log = "/tmp/log_{}".format(current_process().pid)
+def read_samples(json_path):
+    result = {}
+
+    try:
+        meta = reader.read_file(json_path)
+        benches = meta["benchmarks"]
+
+        for bench in benches:
+            bench_name = bench["name"]
+            result[bench_name] = {}
+            states = bench["states"]
+
+            for state in states:
+                state_name = state["name"]
+                result[bench_name][state_name] = parse_samples(state)
+    except Exception:
+        pass
+
+    return result
+
+
+def compare(base_samples, root, base, variant):
     stat = []
 
     base_path = os.path.join(root, base)
     variant_path = os.path.join(root, variant)
 
-    try:
-        ref_root = reader.read_file(base_path)
-        cmp_root = reader.read_file(variant_path)
+    all_base_samples = base_samples[base_path]['samples']
+    all_base_centers = base_samples[base_path]['center']
 
-        ref_benches = ref_root["benchmarks"]
+    try:
+        cmp_root = reader.read_file(variant_path)
         cmp_benches = cmp_root["benchmarks"]
 
         for cmp_bench in cmp_benches:
-            ref_bench = find_matching_bench(cmp_bench, ref_benches)
-            if not ref_bench:
+            bench_name = cmp_bench["name"]
+            if bench_name not in all_base_samples:
                 continue
 
-            axes = cmp_bench["axes"]
-            ref_states = ref_bench["states"]
-            cmp_states = cmp_bench["states"]
+            states = cmp_bench["states"]
 
-            axes = axes if axes else []
+            for state in states:
+                state_name = state["name"]
 
-            for cmp_state in cmp_states:
-                cmp_state_name = cmp_state["name"]
-                ref_state = next(filter(lambda st: st["name"] == cmp_state_name,
-                                        ref_states),
-                                 None)
-                if not ref_state:
+                if state_name not in all_base_samples[bench_name]:
                     continue
 
-                axis_values = cmp_state["axis_values"]
-                if not axis_values:
-                    axis_values = []
-
-                cmp_summaries = cmp_state["summaries"]
-                ref_summaries = ref_state["summaries"]
-
-                if not ref_summaries or not cmp_summaries:
-                    continue
-
-                ref_samples = parse_samples(ref_state)
-                cmp_samples = parse_samples(cmp_state)
+                ref_samples = all_base_samples[bench_name][state_name]
+                cmp_samples = parse_samples(state)
 
                 if len(ref_samples) > 0:
                     if len(cmp_samples) > 0:
                         if distributions_are_different(ref_samples, cmp_samples):
-                            ref_median = center(ref_samples)
+                            ref_median = all_base_centers[bench_name][state_name]
                             cmp_median = center(cmp_samples)
 
                             diff = cmp_median - ref_median
                             frac_diff = diff / ref_median
 
-                            with open(log, "a") as log_file:
-                                log_file.write("{}: {}\n".format(variant_path, frac_diff))
-
                             stat.append(frac_diff * 100)
                         else:
-                            with open(log, "a") as log_file:
-                                log_file.write("{}: {}\n".format(variant_path, "same distribution"))
+                            pass
     except Exception:
         pass
 
@@ -184,6 +177,7 @@ for T in Ts:
 
         for Elements in ProblemSizes:
             results = {}
+            base_samples = {}
             case_dir = os.path.join(result_dir, 'tdp')
             case_dir = os.path.join(case_dir, T)
             case_dir = os.path.join(case_dir, OffsetT)
@@ -201,23 +195,30 @@ for T in Ts:
 
                     if file.endswith('.base.json'):
                         results[algorithm]['base'] = file
+                        base_path = os.path.join(root, file)
+                        samples = read_samples(base_path)
+                        centers = {}
+
+                        for bench in samples:
+                            centers[bench] = {}
+                            for state in samples[bench]:
+                                centers[bench][state] = center(samples[bench][state])
+
+                        base_samples[base_path] = {'samples': samples,
+                                                   'center': centers} 
                     else:
                         results[algorithm]['variants'].append(file)
 
-            root = os.path.join(result_dir, 'tdp')
-            root = os.path.join(root, T)
-            root = os.path.join(root, OffsetT)
-            root = os.path.join(root, Elements)
-
             print("processing {}/{}/{}:".format(T, OffsetT, Elements))
-
             for algorithm in results:
                 data = results[algorithm]
                 base = data['base']
 
                 # for variant in data['variants']:
-                    # v, frac_diffs = compare(root, base, variant)
-                for variant, frac_diffs in tqdm(pool.imap_unordered(partial(compare, root, base), data['variants']), total=len(data['variants'])):
+                    # v, frac_diffs = compare(case_dir, base, variant)
+                closure = partial(compare, base_samples, case_dir, base)
+                variants = data['variants']
+                for variant, frac_diffs in tqdm(pool.imap_unordered(closure, variants), total=len(variants)):
                     if len(frac_diffs):
                         if algorithm not in speedups:
                             speedups[algorithm] = {}
