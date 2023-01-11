@@ -9,6 +9,7 @@ from nvbench_json import reader
 from tabulate import tabulate
 from functools import partial
 from multiprocessing.pool import Pool
+from multiprocessing import current_process
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--compare', type=str, default='compare.mannwhitneyu')
@@ -108,6 +109,7 @@ def parse_samples(state):
 
 
 def compare(root, base, variant):
+    log = "/tmp/log_{}".format(current_process().pid)
     stat = []
 
     base_path = os.path.join(root, base)
@@ -161,7 +163,13 @@ def compare(root, base, variant):
                             diff = cmp_median - ref_median
                             frac_diff = diff / ref_median
 
+                            with open(log, "a") as log_file:
+                                log_file.write("{}: {}\n".format(variant_path, frac_diff))
+
                             stat.append(frac_diff * 100)
+                        else:
+                            with open(log, "a") as log_file:
+                                log_file.write("{}: {}\n".format(variant_path, "same distribution"))
     except Exception:
         pass
 
@@ -169,7 +177,7 @@ def compare(root, base, variant):
 
 
 for T in Ts:
-    pool = Pool()
+    pool = Pool(8)
 
     for OffsetT in OffsetTs:
         speedups = {}
@@ -201,11 +209,15 @@ for T in Ts:
             root = os.path.join(root, OffsetT)
             root = os.path.join(root, Elements)
 
+            print("processing {}/{}/{}:".format(T, OffsetT, Elements))
+
             for algorithm in results:
                 data = results[algorithm]
                 base = data['base']
 
-                for variant, frac_diffs in pool.map(partial(compare, root, base), data['variants']):
+                # for variant in data['variants']:
+                    # v, frac_diffs = compare(root, base, variant)
+                for variant, frac_diffs in tqdm(pool.imap_unordered(partial(compare, root, base), data['variants']), total=len(data['variants'])):
                     if len(frac_diffs):
                         if algorithm not in speedups:
                             speedups[algorithm] = {}
