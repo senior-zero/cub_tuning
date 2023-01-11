@@ -4,8 +4,11 @@ import os
 import argparse
 import numpy as np
 import importlib
+from tqdm import tqdm
 from nvbench_json import reader
 from tabulate import tabulate
+from functools import partial
+from multiprocessing.pool import Pool
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--compare', type=str, default='compare.mannwhitneyu')
@@ -104,61 +107,70 @@ def parse_samples(state):
     return samples
 
 
-def compare(base, variant):
-    ref_root = reader.read_file(base)
-    cmp_root = reader.read_file(variant)
-
-    ref_benches = ref_root["benchmarks"]
-    cmp_benches = cmp_root["benchmarks"]
-
+def compare(root, base, variant):
     stat = []
-    for cmp_bench in cmp_benches:
-        ref_bench = find_matching_bench(cmp_bench, ref_benches)
-        if not ref_bench:
-            continue
 
-        axes = cmp_bench["axes"]
-        ref_states = ref_bench["states"]
-        cmp_states = cmp_bench["states"]
+    base_path = os.path.join(root, base)
+    variant_path = os.path.join(root, variant)
 
-        axes = axes if axes else []
+    try:
+        ref_root = reader.read_file(base_path)
+        cmp_root = reader.read_file(variant_path)
 
-        for cmp_state in cmp_states:
-            cmp_state_name = cmp_state["name"]
-            ref_state = next(filter(lambda st: st["name"] == cmp_state_name,
-                                    ref_states),
-                             None)
-            if not ref_state:
+        ref_benches = ref_root["benchmarks"]
+        cmp_benches = cmp_root["benchmarks"]
+
+        for cmp_bench in cmp_benches:
+            ref_bench = find_matching_bench(cmp_bench, ref_benches)
+            if not ref_bench:
                 continue
 
-            axis_values = cmp_state["axis_values"]
-            if not axis_values:
-                axis_values = []
+            axes = cmp_bench["axes"]
+            ref_states = ref_bench["states"]
+            cmp_states = cmp_bench["states"]
 
-            cmp_summaries = cmp_state["summaries"]
-            ref_summaries = ref_state["summaries"]
+            axes = axes if axes else []
 
-            if not ref_summaries or not cmp_summaries:
-                continue
+            for cmp_state in cmp_states:
+                cmp_state_name = cmp_state["name"]
+                ref_state = next(filter(lambda st: st["name"] == cmp_state_name,
+                                        ref_states),
+                                 None)
+                if not ref_state:
+                    continue
 
-            ref_samples = parse_samples(ref_state)
-            cmp_samples = parse_samples(cmp_state)
+                axis_values = cmp_state["axis_values"]
+                if not axis_values:
+                    axis_values = []
 
-            if len(ref_samples) > 0:
-                if len(cmp_samples) > 0:
-                    if distributions_are_different(ref_samples, cmp_samples):
-                        ref_median = center(ref_samples)
-                        cmp_median = center(cmp_samples)
+                cmp_summaries = cmp_state["summaries"]
+                ref_summaries = ref_state["summaries"]
 
-                        diff = cmp_median - ref_median
-                        frac_diff = diff / ref_median
+                if not ref_summaries or not cmp_summaries:
+                    continue
 
-                        stat.append(frac_diff * 100)
+                ref_samples = parse_samples(ref_state)
+                cmp_samples = parse_samples(cmp_state)
 
-    return stat
+                if len(ref_samples) > 0:
+                    if len(cmp_samples) > 0:
+                        if distributions_are_different(ref_samples, cmp_samples):
+                            ref_median = center(ref_samples)
+                            cmp_median = center(cmp_samples)
+
+                            diff = cmp_median - ref_median
+                            frac_diff = diff / ref_median
+
+                            stat.append(frac_diff * 100)
+    except Exception:
+        pass
+
+    return variant, stat
 
 
 for T in Ts:
+    pool = Pool()
+
     for OffsetT in OffsetTs:
         speedups = {}
 
@@ -193,18 +205,13 @@ for T in Ts:
                 data = results[algorithm]
                 base = data['base']
 
-                for variant in data['variants']:
-                    try:
-                        frac_diffs = compare(os.path.join(root, base), os.path.join(root, variant))
-                        if len(frac_diffs):
-                            if algorithm not in speedups:
-                                speedups[algorithm] = {}
-                            if variant not in speedups[algorithm]:
-                                speedups[algorithm][variant] = {}
-                            speedups[algorithm][variant][Elements] = frac_diffs
-
-                    except Exception:
-                        pass
+                for variant, frac_diffs in pool.map(partial(compare, root, base), data['variants']):
+                    if len(frac_diffs):
+                        if algorithm not in speedups:
+                            speedups[algorithm] = {}
+                        if variant not in speedups[algorithm]:
+                            speedups[algorithm][variant] = {}
+                        speedups[algorithm][variant][Elements] = frac_diffs
         
         table = []
         print("T={}; OffsetT={};".format(T, OffsetT))
